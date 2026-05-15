@@ -10,6 +10,7 @@
 
 ```text
 ai-coding
+ai-agent
 codex
 claude-code
 mcp
@@ -17,6 +18,7 @@ agent-workflow
 local-first
 developer-tools
 automation
+project-memory
 ```
 
 ## About

@@ -6,6 +6,9 @@
 
 ### 新增
 
+- GitHub issue / PR 模板。
+- GitHub Actions CI：检查 CLI 语法、构建 MCP servers、扫描明显私有路径。
+- 项目作用说明和路线图。
 - `vibe` CLI：初始化项目、导入文档、创建任务、启动 Agent、审查、沉淀经验、管理参考项目和归档运行记录。
 - `agent-runner`：基于计划文件启动 Codex 或 Claude Code 的闭环执行。
 - `skills-mcp-server`：统一索引本地 Codex / Claude Code skills。

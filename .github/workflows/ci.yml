@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Check CLI syntax
+        run: |
+          node --check cli/vibe-cli/bin/vibe
+          node --check cli/agent-runner/bin/agent-runner
+
+      - name: Build MCP servers
+        run: |
+          for server in skills-mcp-server project-ops-mcp-server verification-mcp-server reference-mcp-server; do
+            echo "Building $server"
+            npm ci --prefix "mcp/$server"
+            npm run build --prefix "mcp/$server"
+          done
+
+      - name: Public safety scan
+        run: |
+          ! grep -R "/Users/alice\|vibe-coding-kit\|vibe-coding/" . \
+            --exclude-dir=.git \
+            --exclude-dir=node_modules \
+            --exclude=package-lock.json
