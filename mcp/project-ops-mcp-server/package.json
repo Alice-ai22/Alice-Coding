@@ -1,0 +1,26 @@
+{
+  "name": "project-ops-mcp-server",
+  "version": "0.1.0",
+  "description": "Local MCP server for project requirements, plans, tasks, verification, and learnings.",
+  "type": "module",
+  "bin": {
+    "project-ops-mcp-server": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.5",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

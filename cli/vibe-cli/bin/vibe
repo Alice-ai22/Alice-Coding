@@ -1,0 +1,972 @@
+#!/usr/bin/env node
+
+import { appendFileSync, copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const VERSION = "0.1.0";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const REPO_ROOT = path.resolve(__dirname, "../../..");
+const NODE_BIN = process.env.VIBE_NODE_BIN || "node";
+const PROJECT_OPS_SERVER = process.env.VIBE_PROJECT_OPS_SERVER || path.join(REPO_ROOT, "mcp", "project-ops-mcp-server", "dist", "index.js");
+const VERIFICATION_SERVER = process.env.VIBE_VERIFICATION_SERVER || path.join(REPO_ROOT, "mcp", "verification-mcp-server", "dist", "index.js");
+const REFERENCE_SERVER = process.env.VIBE_REFERENCE_SERVER || path.join(REPO_ROOT, "mcp", "reference-mcp-server", "dist", "index.js");
+const SKILLS_SERVER = process.env.VIBE_SKILLS_SERVER || path.join(REPO_ROOT, "mcp", "skills-mcp-server", "dist", "index.js");
+const AGENT_RUNNER = process.env.VIBE_AGENT_RUNNER || path.join(REPO_ROOT, "cli", "agent-runner", "bin", "agent-runner");
+const CODEX_CONFIG = process.env.VIBE_CODEX_CONFIG || path.join(homedir(), ".codex", "config.toml");
+const CLAUDE_MCP_CONFIG = process.env.VIBE_CLAUDE_MCP_CONFIG || path.join(homedir(), ".claude", ".mcp.json");
+const DEFAULT_KIT_SOURCE = process.env.VIBE_KIT_SOURCE || REPO_ROOT;
+const DEFAULT_KIT_CACHE = process.env.VIBE_KIT_CACHE || path.join(homedir(), ".alice-coding", "cache", "kit");
+
+function usage(exitCode = 0) {
+  console.log(`
+vibe ${VERSION}
+
+Usage:
+  vibe init [options]
+  vibe bootstrap [options]
+  vibe status [options]
+  vibe task <create|list|next|done> [args] [options]
+  vibe ingest <file...> [options]
+  vibe index [options]
+  vibe rules <propose|list|accept|reject> [args] [options]
+  vibe refs <search|fetch|add|list|context> [args] [options]
+  vibe plan <task-id> <title> [options]
+  vibe run <task-id|plan.md> [options]
+  vibe review [task-id|run-name] [options]
+  vibe learn [task-id|run-name] [options]
+  vibe issue <task-id> [options]
+  vibe pr <task-id> [options]
+  vibe sync [options]
+  vibe update [options]
+  vibe archive [options]
+  vibe doctor
+
+Options:
+  --cwd <dir>              Project directory. Default: current directory.
+  --project-name <name>    Project name for vibe init.
+  --goal <text>            Goal for vibe plan.
+  --scope <text>           Scope for vibe plan.
+  --verification <text>    Verification for vibe plan.
+  --agent <codex|claude>   Agent for vibe run. Default: codex.
+  --mode <mode>            Execution mode: read-only, workspace, full-auto. Default: full-auto.
+  --dry-run                Preview generated command without running agent.
+  --fix                    For bootstrap: create missing project files and sync kit.
+  --type <type>            For ingest: requirements, product, or plans.
+  --language <lang>        For refs search: language filter.
+  --min-stars <n>          For refs search: minimum stars. Default: 100.
+  --limit <n>              For refs search: result limit. Default: 5.
+  --why <text>             For refs add: why this reference matters.
+  --strict                 For review: include stricter checklist.
+  --diff                   For review: include git diff excerpt.
+  --last-run               For review/learn: use latest run.
+  --name <name>            Run name for agent-runner.
+  --max-turns <n>          Claude only.
+  --title <text>           Learning title for vibe learn.
+  --body <text>            Learning body for vibe learn.
+  --kit-source <path>      Kit source path. Default: ${DEFAULT_KIT_SOURCE}
+  --cache-dir <path>       Kit cache path. Default: ${DEFAULT_KIT_CACHE}
+  --keep <n>               Runs to keep during archive. Default: 10.
+  --older-than-days <n>    Archive runs older than n days.
+  --json                   Print JSON when supported.
+  -h, --help               Show help.
+
+Examples:
+  vibe init --cwd .
+  vibe bootstrap --cwd . --fix
+  vibe ingest ./prd.md --type requirements --cwd .
+  vibe task create TASK-001 "Add login flow" --goal "Implement login" --cwd .
+  vibe index --cwd .
+  vibe rules propose "Always run lint before build" --cwd .
+  vibe refs search "nextjs dashboard shadcn" --language TypeScript --cwd .
+  vibe refs add https://github.com/example/repo --why "参考仪表盘信息架构" --cwd .
+  vibe plan TASK-001 "Add login flow" --goal "Implement login" --cwd .
+  vibe run TASK-001 --agent codex --cwd .
+  vibe review TASK-001 --agent claude --dry-run
+  vibe learn TASK-001 --title "Login flow run"
+  vibe sync
+  vibe archive --keep 10 --older-than-days 14
+  vibe run .project-ops/plans/task-001-add-login-flow.md --dry-run
+`.trim());
+  process.exit(exitCode);
+}
+
+function fail(message) {
+  console.error(`vibe: ${message}`);
+  process.exit(1);
+}
+
+function parseArgs(argv) {
+  const [command, ...rest] = argv;
+  if (!command || command === "-h" || command === "--help") usage(0);
+
+  const options = {
+    command,
+    cwd: process.cwd(),
+    projectName: undefined,
+    goal: undefined,
+    scope: "",
+    verification: "",
+    agent: "codex",
+    mode: "full-auto",
+    dryRun: false,
+    fix: false,
+    type: "requirements",
+    language: undefined,
+    minStars: 100,
+    limit: 5,
+    why: undefined,
+    strict: false,
+    diff: false,
+    lastRun: false,
+    name: undefined,
+    maxTurns: undefined,
+    title: undefined,
+    body: undefined,
+    kitSource: DEFAULT_KIT_SOURCE,
+    cacheDir: DEFAULT_KIT_CACHE,
+    keep: 10,
+    olderThanDays: undefined,
+    json: false,
+    positionals: []
+  };
+
+  for (let i = 0; i < rest.length; i += 1) {
+    const arg = rest[i];
+    const next = () => {
+      const value = rest[i + 1];
+      if (!value) fail(`Missing value for ${arg}.`);
+      i += 1;
+      return value;
+    };
+
+    if (arg === "--cwd") options.cwd = path.resolve(next());
+    else if (arg === "--project-name") options.projectName = next();
+    else if (arg === "--goal") options.goal = next();
+    else if (arg === "--scope") options.scope = next();
+    else if (arg === "--verification") options.verification = next();
+    else if (arg === "--agent") options.agent = next();
+    else if (arg === "--mode") options.mode = next();
+    else if (arg === "--dry-run") options.dryRun = true;
+    else if (arg === "--fix") options.fix = true;
+    else if (arg === "--type") options.type = next();
+    else if (arg === "--language") options.language = next();
+    else if (arg === "--min-stars") options.minStars = Number.parseInt(next(), 10);
+    else if (arg === "--limit") options.limit = Number.parseInt(next(), 10);
+    else if (arg === "--why") options.why = next();
+    else if (arg === "--strict") options.strict = true;
+    else if (arg === "--diff") options.diff = true;
+    else if (arg === "--last-run") options.lastRun = true;
+    else if (arg === "--name") options.name = next();
+    else if (arg === "--max-turns") options.maxTurns = next();
+    else if (arg === "--title") options.title = next();
+    else if (arg === "--body") options.body = next();
+    else if (arg === "--kit-source") options.kitSource = path.resolve(next());
+    else if (arg === "--cache-dir") options.cacheDir = path.resolve(next());
+    else if (arg === "--keep") options.keep = Number.parseInt(next(), 10);
+    else if (arg === "--older-than-days") options.olderThanDays = Number.parseInt(next(), 10);
+    else if (arg === "--json") options.json = true;
+    else if (arg === "-h" || arg === "--help") usage(0);
+    else if (arg.startsWith("-")) fail(`Unknown option "${arg}".`);
+    else options.positionals.push(arg);
+  }
+
+  if (!existsSync(options.cwd)) fail(`Project directory not found: ${options.cwd}`);
+  if (!["codex", "claude"].includes(options.agent)) fail(`Unknown agent "${options.agent}". Use codex or claude.`);
+  if (!["read-only", "workspace", "full-auto"].includes(options.mode)) fail(`Unknown mode "${options.mode}".`);
+  return options;
+}
+
+function rpcRequest(id, method, params = {}) {
+  return JSON.stringify({ jsonrpc: "2.0", id, method, params });
+}
+
+function callProjectOps(toolName, args) {
+  if (!existsSync(PROJECT_OPS_SERVER)) fail(`project-ops MCP server not found: ${PROJECT_OPS_SERVER}`);
+  const input = [
+    rpcRequest(1, "initialize", {
+      protocolVersion: "2024-11-05",
+      capabilities: {},
+      clientInfo: { name: "vibe-cli", version: VERSION }
+    }),
+    JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized", params: {} }),
+    rpcRequest(2, "tools/call", { name: toolName, arguments: args })
+  ].join("\n") + "\n";
+
+  const result = spawnSync(NODE_BIN, [PROJECT_OPS_SERVER], {
+    input,
+    encoding: "utf8",
+    stdio: ["pipe", "pipe", "pipe"]
+  });
+
+  if (result.error) fail(result.error.message);
+  if (result.status !== 0) fail(result.stderr || `project-ops exited with ${result.status}`);
+
+  const lines = result.stdout.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+  const response = lines.find((line) => line.id === 2);
+  if (!response) fail("No project-ops tool response received.");
+  if (response.error) fail(response.error.message || JSON.stringify(response.error));
+  return response.result;
+}
+
+function callReference(toolName, args) {
+  if (!existsSync(REFERENCE_SERVER)) fail(`reference MCP server not found: ${REFERENCE_SERVER}`);
+  const input = [
+    rpcRequest(1, "initialize", {
+      protocolVersion: "2024-11-05",
+      capabilities: {},
+      clientInfo: { name: "vibe-cli", version: VERSION }
+    }),
+    JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized", params: {} }),
+    rpcRequest(2, "tools/call", { name: toolName, arguments: args })
+  ].join("\n") + "\n";
+
+  const result = spawnSync(NODE_BIN, [REFERENCE_SERVER], {
+    input,
+    encoding: "utf8",
+    stdio: ["pipe", "pipe", "pipe"]
+  });
+
+  if (result.error) fail(result.error.message);
+  if (result.status !== 0) fail(result.stderr || `reference exited with ${result.status}`);
+
+  const lines = result.stdout.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+  const response = lines.find((line) => line.id === 2);
+  if (!response) fail("No reference tool response received.");
+  if (response.error) fail(response.error.message || JSON.stringify(response.error));
+  return response.result;
+}
+
+function toolStructured(result) {
+  return result?.structuredContent ?? {};
+}
+
+function printResult(result, json) {
+  if (json) {
+    console.log(JSON.stringify(toolStructured(result), null, 2));
+    return;
+  }
+  const text = result?.content?.[0]?.text;
+  console.log(text || JSON.stringify(toolStructured(result), null, 2));
+}
+
+function readTasks(cwd) {
+  const tasksPath = path.join(cwd, ".project-ops", "tasks.json");
+  if (!existsSync(tasksPath)) return [];
+  const parsed = JSON.parse(readFileSync(tasksPath, "utf8"));
+  return Array.isArray(parsed.tasks) ? parsed.tasks : [];
+}
+
+function writeTasks(cwd, tasks) {
+  const tasksPath = path.join(cwd, ".project-ops", "tasks.json");
+  mkdirSync(path.dirname(tasksPath), { recursive: true });
+  writeFileSync(tasksPath, JSON.stringify({ tasks }, null, 2) + "\n");
+}
+
+function now() {
+  return new Date().toISOString();
+}
+
+function slug(input) {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 90) || "item";
+}
+
+function walkFiles(dir, extensions = [".md", ".json", ".txt"]) {
+  if (!existsSync(dir)) return [];
+  const out = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...walkFiles(full, extensions));
+    else if (entry.isFile() && extensions.includes(path.extname(entry.name))) out.push(full);
+  }
+  return out;
+}
+
+function keywordList(text) {
+  const words = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fff\s-]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length >= 3)
+    .slice(0, 200);
+  return [...new Set(words)].slice(0, 20);
+}
+
+function resolvePlan(cwd, identifier) {
+  const direct = path.resolve(cwd, identifier);
+  if (existsSync(direct)) return direct;
+
+  const tasks = readTasks(cwd);
+  const task = tasks.find((item) => item.id === identifier);
+  if (!task) fail(`No task found for "${identifier}" and no file exists at ${direct}.`);
+  if (!task.plan) fail(`Task ${identifier} does not have a plan path.`);
+
+  const opsPlan = path.resolve(cwd, ".project-ops", task.plan);
+  if (existsSync(opsPlan)) return opsPlan;
+  const projectPlan = path.resolve(cwd, task.plan);
+  if (existsSync(projectPlan)) return projectPlan;
+  fail(`Plan for ${identifier} not found: ${task.plan}`);
+}
+
+function agentRunsDir(cwd) {
+  return path.join(cwd, ".agent-runs");
+}
+
+function listRunDirs(cwd) {
+  const root = agentRunsDir(cwd);
+  if (!existsSync(root)) return [];
+  return readdirSync(root)
+    .map((name) => path.join(root, name))
+    .filter((entry) => {
+      try {
+        return statSync(entry).isDirectory();
+      } catch {
+        return false;
+      }
+    })
+    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+}
+
+function resolveRunDir(cwd, identifier) {
+  const runs = listRunDirs(cwd);
+  if (!identifier || identifier === "--last-run" || identifier === "last") {
+    if (!runs.length) fail("No .agent-runs entries found.");
+    return runs[0];
+  }
+
+  const direct = path.resolve(cwd, ".agent-runs", identifier);
+  if (existsSync(direct)) return direct;
+
+  const matchingTaskRun = runs.find((runDir) => {
+    const name = path.basename(runDir);
+    return name.includes(identifier.toLowerCase()) || name.includes(identifier);
+  });
+  if (matchingTaskRun) return matchingTaskRun;
+
+  if (existsSync(path.resolve(cwd, identifier))) return path.resolve(cwd, identifier);
+  fail(`No run directory found for "${identifier}".`);
+}
+
+function readOptional(filePath) {
+  return existsSync(filePath) ? readFileSync(filePath, "utf8") : "";
+}
+
+function commandInit(options) {
+  const result = callProjectOps("project_ops_init", {
+    project_dir: options.cwd,
+    project_name: options.projectName,
+    response_format: options.json ? "json" : "markdown"
+  });
+  printResult(result, options.json);
+}
+
+function commandStatus(options) {
+  const result = callProjectOps("project_ops_status", {
+    project_dir: options.cwd,
+    response_format: options.json ? "json" : "markdown"
+  });
+  printResult(result, options.json);
+}
+
+function commandBootstrap(options) {
+  const checks = [
+    ["project-ops MCP", PROJECT_OPS_SERVER],
+    ["verification MCP", VERIFICATION_SERVER],
+    ["reference MCP", REFERENCE_SERVER],
+    ["skills MCP", SKILLS_SERVER],
+    ["agent-runner", AGENT_RUNNER],
+    ["vibe kit source", options.kitSource],
+    ["Codex config", CODEX_CONFIG],
+    ["Claude MCP config", CLAUDE_MCP_CONFIG]
+  ].map(([label, file]) => ({ label, file, ok: existsSync(file) }));
+
+  if (options.fix) {
+    copyKit(options.kitSource, options.cacheDir);
+    if (!existsSync(path.join(options.cwd, ".project-ops"))) {
+      callProjectOps("project_ops_init", {
+        project_dir: options.cwd,
+        project_name: options.projectName,
+        response_format: "json"
+      });
+    }
+  }
+
+  const projectOps = existsSync(path.join(options.cwd, ".project-ops"));
+  const output = { checks, project_ops_exists: projectOps, fixed: options.fix };
+  if (options.json) console.log(JSON.stringify(output, null, 2));
+  else {
+    console.log("# Vibe Bootstrap\n");
+    for (const check of checks) console.log(`- ${check.ok ? "ok" : "missing"} ${check.label}: ${check.file}`);
+    console.log(`- ${projectOps ? "ok" : options.fix ? "created" : "missing"} project .project-ops: ${path.join(options.cwd, ".project-ops")}`);
+  }
+}
+
+function commandTask(options) {
+  const [subcommand, taskId, ...rest] = options.positionals;
+  if (!subcommand) fail("Missing task subcommand: create, list, next, or done.");
+  const tasks = readTasks(options.cwd);
+
+  if (subcommand === "list") {
+    const output = { count: tasks.length, tasks };
+    if (options.json) console.log(JSON.stringify(output, null, 2));
+    else {
+      console.log("# Tasks\n");
+      for (const task of tasks) console.log(`- ${task.id} [${task.status}] ${task.title}`);
+    }
+    return;
+  }
+
+  if (subcommand === "next") {
+    const task = tasks.find((item) => ["ready", "backlog"].includes(item.status)) || tasks.find((item) => item.status !== "done" && item.status !== "archived");
+    if (options.json) console.log(JSON.stringify({ task: task ?? null }, null, 2));
+    else console.log(task ? `${task.id} [${task.status}] ${task.title}` : "No next task found.");
+    return;
+  }
+
+  if (!taskId) fail("Missing task id.");
+
+  if (subcommand === "create") {
+    const title = rest.join(" ").trim();
+    if (!title) fail("Missing task title.");
+    const goal = options.goal || title;
+    const result = callProjectOps("project_ops_create_plan", {
+      project_dir: options.cwd,
+      task_id: taskId,
+      title,
+      goal,
+      scope: options.scope,
+      verification: options.verification,
+      response_format: options.json ? "json" : "markdown"
+    });
+    printResult(result, options.json);
+    return;
+  }
+
+  if (subcommand === "done") {
+    const task = tasks.find((item) => item.id === taskId);
+    const result = callProjectOps("project_ops_update_task_status", {
+      project_dir: options.cwd,
+      id: taskId,
+      title: task?.title || taskId,
+      status: "done",
+      notes: options.body || "Marked done via vibe task done.",
+      response_format: options.json ? "json" : "markdown"
+    });
+    printResult(result, options.json);
+    return;
+  }
+
+  fail(`Unknown task subcommand "${subcommand}".`);
+}
+
+function commandIngest(options) {
+  const files = options.positionals;
+  if (!files.length) fail("Missing file path(s) to ingest.");
+  const typeMap = { requirements: "requirements", product: "product", plans: "plans" };
+  const targetDirName = typeMap[options.type];
+  if (!targetDirName) fail("--type must be requirements, product, or plans.");
+  const targetDir = path.join(options.cwd, ".project-ops", targetDirName);
+  mkdirSync(targetDir, { recursive: true });
+  const copied = [];
+  for (const file of files) {
+    const source = path.resolve(file);
+    if (!existsSync(source)) fail(`File not found: ${source}`);
+    const dest = path.join(targetDir, path.basename(source));
+    copyFileSync(source, dest);
+    copied.push({ source, dest });
+  }
+  buildIndex(options.cwd);
+  if (options.json) console.log(JSON.stringify({ copied }, null, 2));
+  else {
+    console.log("# Documents Ingested\n");
+    for (const item of copied) console.log(`- ${item.source} -> ${item.dest}`);
+  }
+}
+
+function buildIndex(cwd) {
+  const root = path.join(cwd, ".project-ops");
+  const files = walkFiles(root).filter((file) => !file.endsWith("index.json"));
+  const docs = files.map((file) => {
+    const content = readOptional(file);
+    const rel = path.relative(root, file);
+    const title = content.split("\n").find((line) => line.startsWith("#"))?.replace(/^#+\s*/, "").trim() || path.basename(file);
+    return {
+      path: rel,
+      title,
+      size: existsSync(file) ? statSync(file).size : 0,
+      updatedAt: existsSync(file) ? new Date(statSync(file).mtimeMs).toISOString() : now(),
+      keywords: keywordList(content),
+      excerpt: content.slice(0, 500)
+    };
+  });
+  const index = { generatedAt: now(), doc_count: docs.length, docs };
+  mkdirSync(root, { recursive: true });
+  writeFileSync(path.join(root, "index.json"), JSON.stringify(index, null, 2) + "\n");
+  return index;
+}
+
+function commandIndex(options) {
+  const index = buildIndex(options.cwd);
+  if (options.json) console.log(JSON.stringify(index, null, 2));
+  else {
+    console.log("# Project Ops Index\n");
+    console.log(`Docs: ${index.doc_count}`);
+    console.log(`Path: ${path.join(options.cwd, ".project-ops", "index.json")}`);
+  }
+}
+
+function readRuleCandidates(cwd) {
+  const file = path.join(cwd, ".project-ops", "rule-candidates.json");
+  if (!existsSync(file)) return [];
+  const parsed = JSON.parse(readFileSync(file, "utf8"));
+  return Array.isArray(parsed.rules) ? parsed.rules : [];
+}
+
+function writeRuleCandidates(cwd, rules) {
+  const file = path.join(cwd, ".project-ops", "rule-candidates.json");
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify({ rules }, null, 2) + "\n");
+}
+
+function commandRules(options) {
+  const [subcommand, idOrText, ...rest] = options.positionals;
+  if (!subcommand) fail("Missing rules subcommand: propose, list, accept, reject.");
+  const rules = readRuleCandidates(options.cwd);
+
+  if (subcommand === "propose") {
+    const text = [idOrText, ...rest].filter(Boolean).join(" ").trim();
+    if (!text) fail("Missing rule text.");
+    const rule = { id: `RULE-${String(rules.length + 1).padStart(3, "0")}`, text, status: "proposed", createdAt: now() };
+    rules.push(rule);
+    writeRuleCandidates(options.cwd, rules);
+    if (options.json) console.log(JSON.stringify({ rule }, null, 2));
+    else console.log(`# Rule Proposed\n\n- ${rule.id}: ${rule.text}`);
+    return;
+  }
+
+  if (subcommand === "list") {
+    if (options.json) console.log(JSON.stringify({ rules }, null, 2));
+    else {
+      console.log("# Rule Candidates\n");
+      for (const rule of rules) console.log(`- ${rule.id} [${rule.status}] ${rule.text}`);
+    }
+    return;
+  }
+
+  if (!idOrText) fail("Missing rule id.");
+  const rule = rules.find((item) => item.id === idOrText);
+  if (!rule) fail(`Rule not found: ${idOrText}`);
+  if (subcommand === "accept") {
+    rule.status = "accepted";
+    rule.updatedAt = now();
+    const projectRules = path.join(options.cwd, ".project-ops", "project-rules.md");
+    mkdirSync(path.dirname(projectRules), { recursive: true });
+    appendFileSync(projectRules, `\n## ${rule.id}\n\n${rule.text}\n`);
+  } else if (subcommand === "reject") {
+    rule.status = "rejected";
+    rule.updatedAt = now();
+  } else {
+    fail(`Unknown rules subcommand "${subcommand}".`);
+  }
+  writeRuleCandidates(options.cwd, rules);
+  if (options.json) console.log(JSON.stringify({ rule }, null, 2));
+  else console.log(`# Rule ${rule.status}\n\n- ${rule.id}: ${rule.text}`);
+}
+
+function commandRefs(options) {
+  const [subcommand, ...rest] = options.positionals;
+  if (!subcommand) fail("Missing refs subcommand: search, fetch, add, list, context.");
+
+  if (subcommand === "search") {
+    const query = rest.join(" ").trim();
+    if (!query) fail("Missing refs search query.");
+    const result = callReference("reference_search_github", {
+      query,
+      language: options.language,
+      min_stars: options.minStars,
+      limit: options.limit,
+      response_format: options.json ? "json" : "markdown"
+    });
+    printResult(result, options.json);
+    return;
+  }
+
+  if (subcommand === "fetch") {
+    const repository = rest.join(" ").trim();
+    if (!repository) fail("Missing GitHub repository URL or owner/repo.");
+    const result = callReference("reference_fetch_github", {
+      repository,
+      response_format: options.json ? "json" : "markdown"
+    });
+    printResult(result, options.json);
+    return;
+  }
+
+  if (subcommand === "add") {
+    const url = rest[0];
+    if (!url) fail("Missing reference URL.");
+    const result = callReference("reference_add", {
+      project_dir: options.cwd,
+      url,
+      why: options.why || rest.slice(1).join(" ").trim() || "Relevant project reference.",
+      response_format: options.json ? "json" : "markdown"
+    });
+    printResult(result, options.json);
+    return;
+  }
+
+  if (subcommand === "list") {
+    const result = callReference("reference_list", {
+      project_dir: options.cwd,
+      response_format: options.json ? "json" : "markdown"
+    });
+    printResult(result, options.json);
+    return;
+  }
+
+  if (subcommand === "context") {
+    const query = rest.join(" ").trim() || undefined;
+    const result = callReference("reference_context", {
+      project_dir: options.cwd,
+      query,
+      response_format: options.json ? "json" : "markdown"
+    });
+    printResult(result, options.json);
+    return;
+  }
+
+  fail(`Unknown refs subcommand "${subcommand}".`);
+}
+
+function commandPlan(options) {
+  const [taskId, ...titleParts] = options.positionals;
+  const title = titleParts.join(" ").trim();
+  if (!taskId) fail("Missing task id.");
+  if (!title) fail("Missing plan title.");
+  const goal = options.goal || title;
+  const result = callProjectOps("project_ops_create_plan", {
+    project_dir: options.cwd,
+    task_id: taskId,
+    title,
+    goal,
+    scope: options.scope,
+    verification: options.verification,
+    response_format: options.json ? "json" : "markdown"
+  });
+  printResult(result, options.json);
+}
+
+function commandRun(options) {
+  const [identifier] = options.positionals;
+  if (!identifier) fail("Missing task id or plan path.");
+  if (!existsSync(AGENT_RUNNER)) fail(`agent-runner not found: ${AGENT_RUNNER}`);
+  const planPath = resolvePlan(options.cwd, identifier);
+  const args = [options.agent, planPath, "--cwd", options.cwd];
+  if (options.dryRun) args.push("--dry-run");
+  if (options.name) args.push("--name", options.name);
+  if (options.maxTurns) args.push("--max-turns", options.maxTurns);
+  if (options.mode) args.push("--mode", options.mode);
+
+  console.log(`Running: ${AGENT_RUNNER} ${args.join(" ")}`);
+  const result = spawnSync(AGENT_RUNNER, args, {
+    cwd: options.cwd,
+    encoding: "utf8",
+    stdio: "inherit"
+  });
+  if (result.error) fail(result.error.message);
+  if (result.status !== 0) process.exit(result.status ?? 1);
+}
+
+function commandReview(options) {
+  const [identifier] = options.lastRun ? ["last"] : options.positionals;
+  if (!existsSync(AGENT_RUNNER)) fail(`agent-runner not found: ${AGENT_RUNNER}`);
+
+  const runDir = resolveRunDir(options.cwd, identifier);
+  const commandText = readOptional(path.join(runDir, "command.json"));
+  const summary = readOptional(path.join(runDir, "summary.md")) || readOptional(path.join(runDir, "stdout.log"));
+  const diff = options.diff ? spawnSync("git", ["diff", "--stat", "--", "."], { cwd: options.cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).stdout : "";
+  const reviewDir = path.join(options.cwd, ".project-ops", "plans");
+  mkdirSync(reviewDir, { recursive: true });
+  const planPath = path.join(reviewDir, `review-${path.basename(runDir)}.md`);
+  const plan = [
+    `# Review ${path.basename(runDir)}`,
+    "",
+    "## Goal",
+    "",
+    "Review the latest agent run for correctness, regressions, missing verification, and project-rule violations. Use a code-review stance: findings first, ordered by severity, with file/line references where possible.",
+    "",
+    "## Scope",
+    "",
+    `- Run directory: ${runDir}`,
+    "- Inspect changed files in the project.",
+    "- Read the original prompt, command, summary, stdout, and stderr if present.",
+    "- Do not modify production code unless the review uncovers a trivial documentation-only issue in the run artifacts.",
+    "",
+    "## Verification",
+    "",
+    "- Check git diff or file changes relevant to the run.",
+    "- Confirm whether the verification claimed by the run is present and credible.",
+    "- If verification is missing, report it as a finding or residual risk.",
+    options.strict ? "- Strict mode: treat missing tests, missing task status updates, and undocumented risks as findings." : "",
+    options.diff ? "\n## Git Diff Stat\n\n```text\n" + (diff.trim() || "No git diff stat available.") + "\n```" : "",
+    "",
+    "## Run Command",
+    "",
+    "```json",
+    commandText.trim() || "{}",
+    "```",
+    "",
+    "## Run Summary Excerpt",
+    "",
+    summary.slice(0, 4000) || "No captured summary.",
+    ""
+  ].join("\n");
+  writeFileSync(planPath, plan);
+
+  const args = [options.agent, planPath, "--cwd", options.cwd];
+  if (options.dryRun) args.push("--dry-run");
+  if (options.name) args.push("--name", options.name);
+  else args.push("--name", `review-${path.basename(runDir)}`);
+  if (options.maxTurns) args.push("--max-turns", options.maxTurns);
+
+  console.log(`Review plan: ${planPath}`);
+  console.log(`Running: ${AGENT_RUNNER} ${args.join(" ")}`);
+  const result = spawnSync(AGENT_RUNNER, args, {
+    cwd: options.cwd,
+    encoding: "utf8",
+    stdio: "inherit"
+  });
+  if (result.error) fail(result.error.message);
+  if (result.status !== 0) process.exit(result.status ?? 1);
+}
+
+function commandLearn(options) {
+  const [identifier] = options.lastRun ? ["last"] : options.positionals;
+  const runDir = resolveRunDir(options.cwd, identifier);
+  const summary = readOptional(path.join(runDir, "summary.md")) || readOptional(path.join(runDir, "stdout.log"));
+  const stderr = readOptional(path.join(runDir, "stderr.log"));
+  const commandText = readOptional(path.join(runDir, "command.json"));
+  const title = options.title || `Run learning: ${path.basename(runDir)}`;
+  const body = options.body || [
+    `Run directory: ${runDir}`,
+    "",
+    "Command:",
+    "```json",
+    commandText.trim() || "{}",
+    "```",
+    "",
+    "Summary excerpt:",
+    summary.slice(0, 4000) || "No captured summary.",
+    "",
+    stderr.trim() ? `Stderr excerpt:\n\n\`\`\`\n${stderr.slice(0, 2000)}\n\`\`\`` : "Stderr excerpt: none."
+  ].join("\n");
+
+  const result = callProjectOps("project_ops_append_learning", {
+    project_dir: options.cwd,
+    title,
+    body,
+    task_id: identifier && identifier.startsWith("TASK-") ? identifier : undefined,
+    response_format: options.json ? "json" : "markdown"
+  });
+  printResult(result, options.json);
+}
+
+function taskFor(cwd, taskId) {
+  return readTasks(cwd).find((task) => task.id === taskId);
+}
+
+function commandIssue(options) {
+  const [taskId] = options.positionals;
+  if (!taskId) fail("Missing task id.");
+  const task = taskFor(options.cwd, taskId);
+  if (!task) fail(`Task not found: ${taskId}`);
+  const outDir = path.join(options.cwd, ".project-ops", "issues");
+  mkdirSync(outDir, { recursive: true });
+  const file = path.join(outDir, `${slug(taskId)}.md`);
+  const body = [
+    `# ${task.id}: ${task.title}`,
+    "",
+    `Status: ${task.status}`,
+    task.plan ? `Plan: ${task.plan}` : "",
+    "",
+    "## Goal",
+    "",
+    task.notes || "See linked plan.",
+    "",
+    "## Acceptance Criteria",
+    "",
+    "- Implementation follows the plan.",
+    "- Relevant verification passes.",
+    "- Task status and learnings are updated."
+  ].filter(Boolean).join("\n");
+  writeFileSync(file, body + "\n");
+  console.log(file);
+}
+
+function commandPr(options) {
+  const [taskId] = options.positionals;
+  if (!taskId) fail("Missing task id.");
+  const task = taskFor(options.cwd, taskId);
+  if (!task) fail(`Task not found: ${taskId}`);
+  const outDir = path.join(options.cwd, ".project-ops", "prs");
+  mkdirSync(outDir, { recursive: true });
+  const file = path.join(outDir, `${slug(taskId)}.md`);
+  const diffStat = spawnSync("git", ["diff", "--stat"], { cwd: options.cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).stdout;
+  const body = [
+    `# PR: ${task.id} ${task.title}`,
+    "",
+    "## Summary",
+    "",
+    "- Implements the task described in the linked plan.",
+    "",
+    "## Verification",
+    "",
+    "- [ ] Relevant verification has been run.",
+    "",
+    "## Risk",
+    "",
+    "- Review project rules, task scope, and verification output.",
+    "",
+    "## Diff Stat",
+    "",
+    "```text",
+    diffStat.trim() || "No git diff stat available.",
+    "```"
+  ].join("\n");
+  writeFileSync(file, body + "\n");
+  console.log(file);
+}
+
+function copyKit(source, destination) {
+  if (!existsSync(source)) fail(`Kit source not found: ${source}`);
+  mkdirSync(path.dirname(destination), { recursive: true });
+  cpSync(source, destination, {
+    recursive: true,
+    force: true,
+    filter: (src) => !src.includes(`${path.sep}.git${path.sep}`) && !src.endsWith(`${path.sep}.git`)
+  });
+}
+
+function commandSync(options) {
+  copyKit(options.kitSource, options.cacheDir);
+  const output = { source: options.kitSource, cache_dir: options.cacheDir };
+  if (options.json) console.log(JSON.stringify(output, null, 2));
+  else {
+    console.log("# Vibe Kit Synced\n");
+    console.log(`Source: ${options.kitSource}`);
+    console.log(`Cache: ${options.cacheDir}`);
+  }
+}
+
+function commandUpdate(options) {
+  if (existsSync(path.join(options.kitSource, ".git"))) {
+    const upstream = spawnSync("git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], {
+      cwd: options.kitSource,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    if (upstream.status === 0) {
+      const result = spawnSync("git", ["pull", "--ff-only"], {
+        cwd: options.kitSource,
+        encoding: "utf8",
+        stdio: options.json ? ["ignore", "pipe", "pipe"] : "inherit"
+      });
+      if (result.error) fail(result.error.message);
+      if (result.status !== 0) fail(result.stderr || `git pull exited with ${result.status}`);
+    } else if (!options.json) {
+      console.log("No upstream configured for kit source; skipping git pull and syncing local files.");
+    }
+  }
+  commandSync(options);
+}
+
+function commandArchive(options) {
+  const runs = listRunDirs(options.cwd);
+  const archiveRoot = path.join(options.cwd, ".agent-runs-archive");
+  const cutoff = options.olderThanDays
+    ? Date.now() - options.olderThanDays * 24 * 60 * 60 * 1000
+    : undefined;
+  const candidates = runs.filter((runDir, index) => {
+    const mtime = statSync(runDir).mtimeMs;
+    const exceedsKeep = index >= options.keep;
+    const older = cutoff ? mtime < cutoff : false;
+    return exceedsKeep || older;
+  });
+
+  mkdirSync(archiveRoot, { recursive: true });
+  const archived = [];
+  for (const runDir of candidates) {
+    const target = path.join(archiveRoot, path.basename(runDir));
+    let finalTarget = target;
+    let suffix = 1;
+    while (existsSync(finalTarget)) {
+      finalTarget = `${target}-${suffix}`;
+      suffix += 1;
+    }
+    renameSync(runDir, finalTarget);
+    archived.push({ from: runDir, to: finalTarget });
+  }
+
+  const output = { archived_count: archived.length, archived, kept_count: runs.length - archived.length };
+  if (options.json) console.log(JSON.stringify(output, null, 2));
+  else {
+    console.log("# Agent Runs Archived\n");
+    console.log(`Archived: ${archived.length}`);
+    console.log(`Kept: ${runs.length - archived.length}`);
+    for (const item of archived) console.log(`- ${path.basename(item.from)} -> ${item.to}`);
+  }
+}
+
+function commandDoctor(options) {
+  const checks = [
+    ["project-ops MCP", PROJECT_OPS_SERVER],
+    ["verification MCP", VERIFICATION_SERVER],
+    ["reference MCP", REFERENCE_SERVER],
+    ["agent-runner", AGENT_RUNNER],
+    ["vibe kit source", options.kitSource],
+    ["vibe kit cache", options.cacheDir],
+    ["Codex config", CODEX_CONFIG],
+    ["Claude MCP config", CLAUDE_MCP_CONFIG]
+  ];
+  const rows = checks.map(([label, file]) => ({ label, file, ok: existsSync(file) }));
+  const projectStatus = existsSync(path.join(options.cwd, ".project-ops"));
+  if (options.json) {
+    console.log(JSON.stringify({ checks: rows, project_ops_exists: projectStatus }, null, 2));
+    return;
+  }
+  console.log("# Vibe Doctor\n");
+  for (const row of rows) console.log(`- ${row.ok ? "ok" : "missing"} ${row.label}: ${row.file}`);
+  console.log(`- ${projectStatus ? "ok" : "missing"} project .project-ops: ${path.join(options.cwd, ".project-ops")}`);
+}
+
+function run() {
+  const options = parseArgs(process.argv.slice(2));
+  if (options.command === "init") commandInit(options);
+  else if (options.command === "bootstrap") commandBootstrap(options);
+  else if (options.command === "status") commandStatus(options);
+  else if (options.command === "task") commandTask(options);
+  else if (options.command === "ingest") commandIngest(options);
+  else if (options.command === "index") commandIndex(options);
+  else if (options.command === "rules") commandRules(options);
+  else if (options.command === "refs") commandRefs(options);
+  else if (options.command === "plan") commandPlan(options);
+  else if (options.command === "run") commandRun(options);
+  else if (options.command === "review") commandReview(options);
+  else if (options.command === "learn") commandLearn(options);
+  else if (options.command === "issue") commandIssue(options);
+  else if (options.command === "pr") commandPr(options);
+  else if (options.command === "sync") commandSync(options);
+  else if (options.command === "update") commandUpdate(options);
+  else if (options.command === "archive") commandArchive(options);
+  else if (options.command === "doctor") commandDoctor(options);
+  else fail(`Unknown command "${options.command}".`);
+}
+
+run();

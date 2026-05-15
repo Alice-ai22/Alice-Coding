@@ -1,0 +1,263 @@
+#!/usr/bin/env node
+
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+
+const VERSION = "0.1.0";
+
+const DEFAULT_CODEX = process.env.AGENT_RUNNER_CODEX_BIN || "codex";
+const DEFAULT_CLAUDE = process.env.AGENT_RUNNER_CLAUDE_BIN || "claude";
+const DEFAULT_CLAUDE_MCP = process.env.AGENT_RUNNER_CLAUDE_MCP || path.join(homedir(), ".claude", ".mcp.json");
+
+function usage(exitCode = 0) {
+  const text = `
+agent-runner ${VERSION}
+
+Usage:
+  agent-runner codex <plan.md> [options]
+  agent-runner claude <plan.md> [options]
+
+Options:
+  --cwd <dir>              Project directory to run in. Default: current directory.
+  --name <name>            Run name. Default: derived from plan filename and timestamp.
+  --dry-run                Write the prompt and command, but do not start the agent.
+  --no-skills              Do not include the default skills MCP instructions in the prompt.
+  --max-turns <n>          Claude only. Limit agentic turns.
+  --codex-bin <path>       Codex binary. Default: ${DEFAULT_CODEX}
+  --claude-bin <path>      Claude binary. Default: ${DEFAULT_CLAUDE}
+  --claude-mcp <path>      Claude MCP config. Default: ${DEFAULT_CLAUDE_MCP}
+  --codex-mode <mode>      Codex mode: full-auto or workspace-write. Default: full-auto.
+  --claude-mode <mode>     Claude permission mode. Default: auto.
+  --mode <mode>            Execution mode: read-only, workspace, or full-auto. Default: full-auto.
+  -h, --help               Show help.
+
+Examples:
+  agent-runner codex plans/feature.md --cwd .
+  agent-runner claude plans/fix-tests.md --cwd ~/project --max-turns 30
+  agent-runner codex plans/refactor.md --dry-run
+`;
+  console.log(text.trim());
+  process.exit(exitCode);
+}
+
+function parseArgs(argv) {
+  const [target, planPath, ...rest] = argv;
+  if (!target || target === "-h" || target === "--help") usage(0);
+  if (!["codex", "claude"].includes(target)) fail(`Unknown target "${target}". Use "codex" or "claude".`);
+  if (!planPath) fail("Missing plan file path.");
+
+  const options = {
+    target,
+    planPath,
+    cwd: process.cwd(),
+    dryRun: false,
+    useSkills: true,
+    maxTurns: undefined,
+    codexBin: DEFAULT_CODEX,
+    claudeBin: DEFAULT_CLAUDE,
+    claudeMcp: DEFAULT_CLAUDE_MCP,
+    codexMode: "full-auto",
+    claudeMode: "auto",
+    executionMode: "full-auto",
+    name: undefined
+  };
+
+  for (let i = 0; i < rest.length; i += 1) {
+    const arg = rest[i];
+    const next = () => {
+      const value = rest[i + 1];
+      if (!value) fail(`Missing value for ${arg}.`);
+      i += 1;
+      return value;
+    };
+
+    if (arg === "--cwd") options.cwd = path.resolve(next());
+    else if (arg === "--name") options.name = next();
+    else if (arg === "--dry-run") options.dryRun = true;
+    else if (arg === "--no-skills") options.useSkills = false;
+    else if (arg === "--max-turns") options.maxTurns = next();
+    else if (arg === "--codex-bin") options.codexBin = next();
+    else if (arg === "--claude-bin") options.claudeBin = next();
+    else if (arg === "--claude-mcp") options.claudeMcp = next();
+    else if (arg === "--codex-mode") options.codexMode = next();
+    else if (arg === "--claude-mode") options.claudeMode = next();
+    else if (arg === "--mode") options.executionMode = next();
+    else if (arg === "-h" || arg === "--help") usage(0);
+    else fail(`Unknown option "${arg}".`);
+  }
+
+  options.planPath = path.resolve(options.planPath);
+  return options;
+}
+
+function fail(message) {
+  console.error(`agent-runner: ${message}`);
+  process.exit(1);
+}
+
+function timestamp() {
+  return new Date().toISOString().replace(/[:.]/g, "-");
+}
+
+function slug(input) {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "task";
+}
+
+function makePrompt({ target, planPath, planText, useSkills, executionMode }) {
+  const skillsBlock = useSkills
+    ? `
+Skills MCP policy:
+- The local MCP server named "skills" is available or configured for this environment.
+- Before implementation, search for relevant skills with skills_search when the task involves coding, debugging, frontend, docs, PDF, PPT, spreadsheets, MCP, browser automation, design, deployment, mobile, macOS, research writing, or specialized workflows.
+- Read the most relevant 1-3 skills with skills_read and follow their SKILL.md instructions.
+- If the skills MCP is unavailable, state that briefly and continue with the best local fallback.
+
+Project Ops MCP policy:
+- The local MCP server named "project-ops" is available or configured for this environment.
+- At the start of the run, call project_ops_get_context_bundle when .project-ops exists or the plan references a task id.
+- Use project_ops_read_doc or project_ops_search_docs to load requirements, product notes, decisions, learnings, project rules, and verification guidance as needed.
+- At the end of the run, update task status with project_ops_update_task_status when a task id is known, and append a concise learning with project_ops_append_learning when the run produced reusable project knowledge.
+
+Verification MCP policy:
+- The local MCP server named "verification" is available or configured for this environment.
+- Before running checks, call verification_select with the task goal and known changed files to choose the smallest relevant commands.
+- After running checks, record the outcome with verification_record when a run name is available.
+- If the verification MCP is unavailable, fall back to .project-ops/verification.json, package scripts, and project docs.
+
+Reference MCP policy:
+- The local MCP server named "reference" is available or configured for this environment.
+- When the task asks for inspiration, comparable products, GitHub references, UI patterns, architecture examples, or best practices not covered by local skills, use reference_search_github or reference_context.
+- Register useful references with reference_add, including why they are relevant and any license/quality risks.
+- Do not clone, install, copy substantial code, or adopt external project code without explicit user approval and license review.
+`
+    : "Skills MCP policy: disabled for this run by --no-skills.";
+
+  return `
+You are running as an autonomous local coding agent through ${target}.
+
+Execution mode: ${executionMode}
+- read-only: inspect, review, and report only. Do not modify files.
+- workspace: modify files in the current project only.
+- full-auto: perform the requested closed-loop task within the current project, while preserving unrelated user changes.
+
+Mission:
+- Execute the plan below end to end inside the current project.
+- Read the project before editing.
+- Make focused file changes.
+- Run the relevant tests, builds, linters, or smoke checks.
+- If a command fails, inspect the error, fix the likely cause, and rerun the relevant verification.
+- Do not stop after proposing a plan unless the plan file explicitly requires human approval.
+- Preserve unrelated user changes.
+- Never use destructive git operations unless the plan explicitly asks for them.
+- Finish with a concise summary: changes made, verification run, remaining risks, and changed files.
+
+${skillsBlock}
+
+Plan file:
+${planPath}
+
+Plan:
+${planText}
+`.trim();
+}
+
+function ensureReadableFile(filePath, label) {
+  if (!existsSync(filePath)) fail(`${label} not found: ${filePath}`);
+}
+
+function run() {
+  const options = parseArgs(process.argv.slice(2));
+  ensureReadableFile(options.planPath, "Plan file");
+  if (!existsSync(options.cwd)) fail(`Project directory not found: ${options.cwd}`);
+
+  const planText = readFileSync(options.planPath, "utf8");
+  const runName = slug(options.name || `${path.basename(options.planPath, path.extname(options.planPath))}-${timestamp()}`);
+  const runDir = path.join(options.cwd, ".agent-runs", runName);
+  mkdirSync(runDir, { recursive: true });
+
+  const prompt = makePrompt({
+    target: options.target,
+    planPath: options.planPath,
+    planText,
+    useSkills: options.useSkills,
+    executionMode: options.executionMode
+  });
+
+  const promptPath = path.join(runDir, "prompt.md");
+  const summaryPath = path.join(runDir, "summary.md");
+  const commandPath = path.join(runDir, "command.json");
+  const stdoutPath = path.join(runDir, "stdout.log");
+  const stderrPath = path.join(runDir, "stderr.log");
+  writeFileSync(promptPath, prompt);
+
+  let command;
+  let args;
+
+  if (options.target === "codex") {
+    ensureReadableFile(options.codexBin, "Codex binary");
+    command = options.codexBin;
+    args = ["exec", "--output-last-message", summaryPath];
+    const codexMode = options.executionMode === "workspace" ? "workspace-write" : options.executionMode === "read-only" ? "read-only" : options.codexMode;
+    if (codexMode === "full-auto") args.push("--full-auto");
+    else if (codexMode === "workspace-write") args.push("--sandbox", "workspace-write");
+    else if (codexMode === "read-only") args.push("--sandbox", "read-only");
+    else fail(`Unsupported --codex-mode "${options.codexMode}".`);
+  } else {
+    ensureReadableFile(options.claudeBin, "Claude binary");
+    command = options.claudeBin;
+    args = ["-p", "--permission-mode", options.claudeMode, "--output-format", "text"];
+    if (existsSync(options.claudeMcp)) args.push("--mcp-config", options.claudeMcp);
+    if (options.maxTurns) args.push("--max-turns", options.maxTurns);
+  }
+
+  writeFileSync(commandPath, JSON.stringify({ command, args, cwd: options.cwd, promptPath, summaryPath, stdoutPath, stderrPath }, null, 2));
+
+  if (options.dryRun) {
+    console.log(`Dry run created: ${runDir}`);
+    console.log(`Prompt: ${promptPath}`);
+    console.log(`Command: ${command} ${args.join(" ")}`);
+    return;
+  }
+
+  console.log(`Run directory: ${runDir}`);
+  console.log(`Starting ${options.target} agent...`);
+
+  const result = spawnSync(command, args, {
+    cwd: options.cwd,
+    input: prompt,
+    encoding: "utf8",
+    stdio: ["pipe", "pipe", "pipe"]
+  });
+
+  if (result.stdout) {
+    process.stdout.write(result.stdout);
+    writeFileSync(stdoutPath, result.stdout);
+  } else {
+    writeFileSync(stdoutPath, "");
+  }
+
+  if (result.stderr) {
+    process.stderr.write(result.stderr);
+    writeFileSync(stderrPath, result.stderr);
+  } else {
+    writeFileSync(stderrPath, "");
+  }
+
+  if (options.target === "claude") {
+    const summary = result.stdout?.trim() || result.stderr?.trim() || "Claude completed without captured text output.";
+    writeFileSync(summaryPath, `${summary}\n`);
+  }
+
+  if (result.error) fail(result.error.message);
+  if (result.status !== 0) process.exit(result.status ?? 1);
+
+  console.log(`Agent completed. Summary path: ${summaryPath}`);
+}
+
+run();

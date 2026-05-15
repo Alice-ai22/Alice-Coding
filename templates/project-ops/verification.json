@@ -1,0 +1,7 @@
+{
+  "frontend": ["npm run lint", "npm run build"],
+  "backend": [],
+  "test": [],
+  "smoke": [],
+  "docs": []
+}
