@@ -34,7 +34,11 @@ jobs:
 
       - name: Public safety scan
         run: |
-          ! grep -R "/Users/alice\|vibe-coding-kit\|vibe-coding/" . \
+          if grep -R -E "/Users/alice|vibe-coding-kit|vibe-coding/" . \
             --exclude-dir=.git \
             --exclude-dir=node_modules \
-            --exclude=package-lock.json
+            --exclude=package-lock.json \
+            --exclude=ci.yml; then
+            echo "Found private local paths or old project names."
+            exit 1
+          fi
