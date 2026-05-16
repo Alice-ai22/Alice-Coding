@@ -31,6 +31,7 @@ Options:
   --codex-mode <mode>      Codex mode: full-auto or workspace-write. Default: full-auto.
   --claude-mode <mode>     Claude permission mode. Default: auto.
   --mode <mode>            Execution mode: read-only, workspace, or full-auto. Default: full-auto.
+  --skip-git-repo-check    Codex only. Also added automatically when --cwd is not inside a Git worktree.
   -h, --help               Show help.
 
 Examples:
@@ -61,6 +62,7 @@ function parseArgs(argv) {
     codexMode: "full-auto",
     claudeMode: "auto",
     executionMode: "full-auto",
+    skipGitRepoCheck: false,
     name: undefined
   };
 
@@ -84,6 +86,7 @@ function parseArgs(argv) {
     else if (arg === "--codex-mode") options.codexMode = next();
     else if (arg === "--claude-mode") options.claudeMode = next();
     else if (arg === "--mode") options.executionMode = next();
+    else if (arg === "--skip-git-repo-check") options.skipGitRepoCheck = true;
     else if (arg === "-h" || arg === "--help") usage(0);
     else fail(`Unknown option "${arg}".`);
   }
@@ -189,6 +192,15 @@ function resolveExecutable(command, label) {
   fail(`${label} not found on PATH: ${command}`);
 }
 
+function isGitWorkTree(cwd) {
+  const result = spawnSync("git", ["rev-parse", "--is-inside-work-tree"], {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"]
+  });
+  return result.status === 0 && result.stdout.trim() === "true";
+}
+
 function run() {
   const options = parseArgs(process.argv.slice(2));
   ensureReadableFile(options.planPath, "Plan file");
@@ -225,6 +237,7 @@ function run() {
     else if (codexMode === "workspace-write") args.push("--sandbox", "workspace-write");
     else if (codexMode === "read-only") args.push("--sandbox", "read-only");
     else fail(`Unsupported --codex-mode "${options.codexMode}".`);
+    if (options.skipGitRepoCheck || !isGitWorkTree(options.cwd)) args.push("--skip-git-repo-check");
   } else {
     command = resolveExecutable(options.claudeBin, "Claude binary");
     args = ["-p", "--permission-mode", options.claudeMode, "--output-format", "text"];

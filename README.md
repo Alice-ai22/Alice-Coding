@@ -37,6 +37,8 @@ vibe exec ~/Projects/my-app/task.md --agent codex --mode workspace
 
 Default rule: **if `--cwd` is not provided, the task file's parent directory is the agent working directory.**
 
+New task folders do not need to be Git repositories first. When `agent-runner` starts Codex in a non-Git folder, it automatically adds Codex's `--skip-git-repo-check` flag.
+
 If the task file lives somewhere else, pass the project directory explicitly:
 
 ```bash
@@ -76,6 +78,7 @@ task.md
 | `vibe check-task` | Checks whether a task file has goal, requirements, acceptance criteria, verification, and output expectations. |
 | `vibe exec` | Converts a task file into an execution plan and launches an agent run. |
 | `vibe run` | Runs a structured `.project-ops` task by task id or plan path. |
+| `vibe skill` | Checks or syncs source skill templates with installed Codex skills. |
 | `agent-runner` | Starts Codex or Claude Code with a generated prompt and run directory. |
 | `skills` MCP | Helps agents find and read local skills. |
 | `project-ops` MCP | Reads and maintains requirements, tasks, plans, decisions, rules, and learnings. |
@@ -93,6 +96,7 @@ Task templates live in `templates/tasks/`:
 | `bugfix` | Reproducing, fixing, and verifying bugs. |
 | `docs` | Documentation updates. |
 | `release` | Release prep and public checklist work. |
+| `skill-improve` | Improving a Codex/Alice Coding skill and checking installed-template sync. |
 
 There is also a completion report template in `templates/reports/` and a reusable Alice Coding skill template in `templates/skills/alice-coding/`.
 
@@ -122,9 +126,12 @@ Alice Coding itself stays generic. Your private requirements, run logs, and lear
 ```bash
 # Fast path from a task file
 vibe task-template web-app ./task.md
+vibe task-template skill-improve ./skill-task.md
 vibe check-task ./task.md
 vibe exec ./task.md --agent codex --mode workspace --dry-run
 vibe exec ./task.md --agent codex --mode workspace
+vibe skill doctor alice-coding
+vibe skill sync alice-coding
 
 # Structured project workflow
 vibe bootstrap --cwd . --fix

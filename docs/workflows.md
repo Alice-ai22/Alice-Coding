@@ -15,6 +15,8 @@ vibe exec ~/Projects/my-app/task.md --agent codex --mode workspace
 
 默认规则：如果没有传 `--cwd`，`vibe exec` 会把任务书所在目录作为工作目录。适合“新建一个文件夹，把任务书放进去，让 Agent 在这个文件夹里创建项目”的场景。
 
+这个文件夹不需要先初始化 Git。非 Git 目录中启动 Codex 时，`agent-runner` 会自动补上 `--skip-git-repo-check`。
+
 如果任务书在别处：
 
 ```bash
@@ -43,6 +45,17 @@ vibe refs context --cwd .
 ```
 
 参考项目会登记到 `.project-ops/references/`。Agent 可以读取这些参考上下文，但不应该盲目复制外部代码。
+
+## 优化 Skill
+
+```bash
+vibe task-template skill-improve ./skill-task.md
+vibe check-task ./skill-task.md
+vibe skill doctor alice-coding
+vibe skill sync alice-coding
+```
+
+这条流程适合维护 `templates/skills/<name>`，并检查它是否需要同步到本机 `~/.codex/skills/<name>`。
 
 ## 只读模式
 

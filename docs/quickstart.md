@@ -70,6 +70,8 @@ vibe exec ~/Projects/todo-app/task.md --agent codex --mode workspace --dry-run
 
 这会生成执行计划并展示将要调用的 `agent-runner` 命令，但不会真正启动 Agent。
 
+如果 `~/Projects/todo-app` 还不是 Git 仓库，`agent-runner` 会自动给 Codex 加上 `--skip-git-repo-check`。
+
 ## 4. 启动闭环执行
 
 ```bash
@@ -154,4 +156,7 @@ vibe run TASK-001 --agent codex --mode workspace --cwd .
 
 长期项目：
   bootstrap -> ingest -> task create -> run --dry-run -> run -> review -> learn
+
+Skill 维护：
+  task-template skill-improve -> skill doctor -> 修改模板 -> skill sync
 ```

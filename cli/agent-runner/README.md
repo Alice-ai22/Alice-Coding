@@ -17,6 +17,12 @@ agent-runner claude ./plans/my-task.md --cwd /path/to/project --max-turns 30
 agent-runner codex ./plans/my-task.md --cwd . --dry-run
 ```
 
+当目标文件夹还不是 Git 仓库时，Codex 通常会要求额外的 trust check。为了支持“新建文件夹 + task.md”的任务书工作流，`agent-runner` 会在非 Git 目录中自动给 Codex 加上 `--skip-git-repo-check`。你也可以显式传入：
+
+```bash
+agent-runner codex ./plans/my-task.md --cwd ./new-folder --skip-git-repo-check
+```
+
 ## 运行记录
 
 每次执行会创建：

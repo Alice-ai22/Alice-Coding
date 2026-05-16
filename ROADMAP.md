@@ -9,6 +9,7 @@ Alice Coding 当前处于 `v0.1.x` 早期阶段，目标是先把本地闭环工
 - 完善中文文档和模板。
 - 补充 demo project 和 smoke test。
 - 增强安装脚本的错误提示。
+- 持续完善 skill 维护体验，包括 `vibe skill doctor/sync` 和 skill 优化任务模板。
 
 ## v0.2.x：安装和配置体验
 

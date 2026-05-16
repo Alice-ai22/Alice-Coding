@@ -20,6 +20,7 @@ const CODEX_CONFIG = process.env.VIBE_CODEX_CONFIG || path.join(homedir(), ".cod
 const CLAUDE_MCP_CONFIG = process.env.VIBE_CLAUDE_MCP_CONFIG || path.join(homedir(), ".claude", ".mcp.json");
 const DEFAULT_KIT_SOURCE = process.env.VIBE_KIT_SOURCE || REPO_ROOT;
 const DEFAULT_KIT_CACHE = process.env.VIBE_KIT_CACHE || path.join(homedir(), ".alice-coding", "cache", "kit");
+const DEFAULT_CODEX_SKILLS_DIR = process.env.VIBE_CODEX_SKILLS_DIR || path.join(homedir(), ".codex", "skills");
 
 function usage(exitCode = 0) {
   console.log(`
@@ -34,6 +35,7 @@ Usage:
   vibe index [options]
   vibe rules <propose|list|accept|reject> [args] [options]
   vibe refs <search|fetch|add|list|context> [args] [options]
+  vibe skill <doctor|sync> [name] [options]
   vibe task-template [list|<name> [output.md]] [options]
   vibe check-task <task-file.md> [options]
   vibe plan <task-id> <title> [options]
@@ -72,6 +74,7 @@ Options:
   --body <text>            Learning body for vibe learn.
   --kit-source <path>      Kit source path. Default: ${DEFAULT_KIT_SOURCE}
   --cache-dir <path>       Kit cache path. Default: ${DEFAULT_KIT_CACHE}
+  --skills-dir <path>      Codex skills install directory. Default: ${DEFAULT_CODEX_SKILLS_DIR}
   --keep <n>               Runs to keep during archive. Default: 10.
   --older-than-days <n>    Archive runs older than n days.
   --json                   Print JSON when supported.
@@ -86,6 +89,8 @@ Examples:
   vibe rules propose "Always run lint before build" --cwd .
   vibe refs search "nextjs dashboard shadcn" --language TypeScript --cwd .
   vibe refs add https://github.com/example/repo --why "参考仪表盘信息架构" --cwd .
+  vibe skill doctor alice-coding
+  vibe skill sync alice-coding
   vibe task-template list
   vibe task-template default ./task.md
   vibe check-task ./task.md
@@ -136,6 +141,7 @@ function parseArgs(argv) {
     body: undefined,
     kitSource: DEFAULT_KIT_SOURCE,
     cacheDir: DEFAULT_KIT_CACHE,
+    skillsDir: DEFAULT_CODEX_SKILLS_DIR,
     keep: 10,
     olderThanDays: undefined,
     json: false,
@@ -177,6 +183,7 @@ function parseArgs(argv) {
     else if (arg === "--body") options.body = next();
     else if (arg === "--kit-source") options.kitSource = path.resolve(next());
     else if (arg === "--cache-dir") options.cacheDir = path.resolve(next());
+    else if (arg === "--skills-dir") options.skillsDir = path.resolve(next());
     else if (arg === "--keep") options.keep = Number.parseInt(next(), 10);
     else if (arg === "--older-than-days") options.olderThanDays = Number.parseInt(next(), 10);
     else if (arg === "--json") options.json = true;
@@ -296,6 +303,17 @@ function walkFiles(dir, extensions = [".md", ".json", ".txt"]) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) out.push(...walkFiles(full, extensions));
     else if (entry.isFile() && extensions.includes(path.extname(entry.name))) out.push(full);
+  }
+  return out;
+}
+
+function walkAllFiles(dir) {
+  if (!existsSync(dir)) return [];
+  const out = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...walkAllFiles(full));
+    else if (entry.isFile()) out.push(full);
   }
   return out;
 }
@@ -735,6 +753,98 @@ function commandRefs(options) {
   }
 
   fail(`Unknown refs subcommand "${subcommand}".`);
+}
+
+function skillPaths(options, skillName = "alice-coding") {
+  return {
+    name: skillName,
+    source: path.join(options.kitSource, "templates", "skills", skillName),
+    installed: path.join(options.skillsDir, skillName)
+  };
+}
+
+function compareSkillFiles(source, installed) {
+  const sourceFiles = walkAllFiles(source).map((file) => path.relative(source, file)).sort();
+  const installedFiles = walkAllFiles(installed).map((file) => path.relative(installed, file)).sort();
+  const installedSet = new Set(installedFiles);
+  const sourceSet = new Set(sourceFiles);
+  const missing = sourceFiles.filter((file) => !installedSet.has(file));
+  const extra = installedFiles.filter((file) => !sourceSet.has(file));
+  const different = sourceFiles
+    .filter((file) => installedSet.has(file))
+    .filter((file) => readFileSync(path.join(source, file), "utf8") !== readFileSync(path.join(installed, file), "utf8"));
+  return { source_files: sourceFiles, installed_files: installedFiles, missing, extra, different };
+}
+
+function skillDoctorResult(options, skillName = "alice-coding") {
+  const paths = skillPaths(options, skillName);
+  const sourceSkill = path.join(paths.source, "SKILL.md");
+  const installedSkill = path.join(paths.installed, "SKILL.md");
+  const sourceExists = existsSync(paths.source);
+  const installedExists = existsSync(paths.installed);
+  const checks = [
+    { label: "kit skill template", file: paths.source, ok: sourceExists },
+    { label: "kit SKILL.md", file: sourceSkill, ok: existsSync(sourceSkill) },
+    { label: "installed skill", file: paths.installed, ok: installedExists },
+    { label: "installed SKILL.md", file: installedSkill, ok: existsSync(installedSkill) },
+    { label: "installed references", file: path.join(paths.installed, "references"), ok: existsSync(path.join(paths.installed, "references")) }
+  ];
+  const comparison = sourceExists && installedExists
+    ? compareSkillFiles(paths.source, paths.installed)
+    : { source_files: [], installed_files: [], missing: [], extra: [], different: [] };
+  return {
+    skill: skillName,
+    source: paths.source,
+    installed: paths.installed,
+    checks,
+    comparison,
+    in_sync: sourceExists && installedExists && comparison.missing.length === 0 && comparison.different.length === 0
+  };
+}
+
+function printSkillDoctor(result, json) {
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  console.log(`# Skill Doctor: ${result.skill}\n`);
+  console.log(`Source: ${result.source}`);
+  console.log(`Installed: ${result.installed}\n`);
+  for (const check of result.checks) console.log(`- ${check.ok ? "ok" : "missing"} ${check.label}: ${check.file}`);
+  console.log(`- ${result.in_sync ? "ok" : "needs sync"} source -> installed content`);
+  if (result.comparison.missing.length) console.log(`  Missing in installed: ${result.comparison.missing.join(", ")}`);
+  if (result.comparison.different.length) console.log(`  Different: ${result.comparison.different.join(", ")}`);
+  if (result.comparison.extra.length) console.log(`  Extra in installed: ${result.comparison.extra.join(", ")}`);
+}
+
+function commandSkill(options) {
+  const [subcommand, nameInput] = options.positionals;
+  const skillName = nameInput || "alice-coding";
+  if (!subcommand) fail("Missing skill subcommand: doctor or sync.");
+
+  if (subcommand === "doctor") {
+    printSkillDoctor(skillDoctorResult(options, skillName), options.json);
+    return;
+  }
+
+  if (subcommand === "sync") {
+    const paths = skillPaths(options, skillName);
+    if (!existsSync(paths.source)) fail(`Skill template not found: ${paths.source}`);
+    mkdirSync(path.dirname(paths.installed), { recursive: true });
+    cpSync(paths.source, paths.installed, { recursive: true, force: true });
+    const result = skillDoctorResult(options, skillName);
+    if (options.json) {
+      console.log(JSON.stringify({ synced: true, ...result }, null, 2));
+      return;
+    }
+    console.log(`# Skill Synced: ${skillName}\n`);
+    console.log(`Source: ${paths.source}`);
+    console.log(`Installed: ${paths.installed}\n`);
+    printSkillDoctor(result, false);
+    return;
+  }
+
+  fail(`Unknown skill subcommand "${subcommand}".`);
 }
 
 function commandTaskTemplate(options) {
@@ -1191,6 +1301,7 @@ function run() {
   else if (options.command === "index") commandIndex(options);
   else if (options.command === "rules") commandRules(options);
   else if (options.command === "refs") commandRefs(options);
+  else if (options.command === "skill") commandSkill(options);
   else if (options.command === "task-template") commandTaskTemplate(options);
   else if (options.command === "check-task") commandCheckTask(options);
   else if (options.command === "plan") commandPlan(options);

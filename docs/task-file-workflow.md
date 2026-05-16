@@ -60,6 +60,8 @@ vibe exec /path/to/task.md --cwd /path/to/project --agent codex --mode workspace
 
 `vibe exec` 会把任务书转换成 `.project-ops/plans/exec-*.md`，然后调用 `agent-runner` 在目标目录中执行。
 
+目标目录不需要先是 Git 仓库。对于非 Git 文件夹，`agent-runner` 会自动给 Codex 加上 `--skip-git-repo-check`，让“新建文件夹 + task.md”的工作流可以直接启动。
+
 执行计划中会包含任务书质量检查结果和完成报告格式。任务书缺少关键段落时，`vibe exec` 会继续执行，但会提醒“needs work”。
 
 ## 可用任务模板
@@ -70,6 +72,7 @@ web-app
 bugfix
 docs
 release
+skill-improve
 ```
 
 模板位于 `templates/tasks/`。完成报告模板位于 `templates/reports/completion-report.md`。
