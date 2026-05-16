@@ -10,6 +10,10 @@
   <img alt="MCP" src="https://img.shields.io/badge/MCP-ready-black.svg">
 </p>
 
+<p align="center">
+  <img src="docs/assets/alice-coding-hero.png" alt="Alice Coding task-file workflow: task.md to vibe exec to local agent verification" width="100%">
+</p>
+
 Alice Coding lets you put a task file into a folder and ask an AI coding agent to work there. It turns Codex / Claude Code from a chat assistant into a local workflow that reads context, executes tasks, runs verification, and records what happened.
 
 ```text
@@ -51,18 +55,17 @@ Alice Coding gives each project a local operating layer:
 - MCP servers for skills, project context, verification, and references
 - `agent-runner` for launching Codex or Claude Code in a repeatable way
 
-## Workflow
+## Workflow At A Glance
 
-```mermaid
-flowchart LR
-  A["task.md"] --> B["vibe check-task"]
-  B --> C["vibe exec"]
-  C --> D["generated plan"]
-  D --> E["agent-runner"]
-  E --> F["Codex / Claude Code"]
-  F --> G["file edits"]
-  G --> H["verification"]
-  H --> I[".agent-runs summary"]
+```text
+task.md
+  -> vibe check-task
+  -> vibe exec
+  -> generated plan
+  -> agent-runner
+  -> Codex / Claude Code
+  -> verification
+  -> .agent-runs summary
 ```
 
 ## What You Get
