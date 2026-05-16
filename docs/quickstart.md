@@ -1,6 +1,6 @@
 # 快速开始
 
-这份文档会带你从安装 Alice Coding 到跑通第一个闭环任务。
+这份文档会带你从安装 Alice Coding 到跑通第一个任务书驱动的闭环任务。
 
 ## 1. 安装 Alice Coding
 
@@ -25,9 +25,61 @@ cd Alice-coding
 
 请确保 `~/.local/bin` 在你的 `PATH` 中。
 
-## 2. 配置 Codex 和 Claude Code
+## 2. 准备任务书
 
-Alice Coding 通过 MCP server 给 Agent 提供项目上下文、skills、验证和参考项目能力。你需要把这些 MCP server 配置到 Codex 或 Claude Code 中。
+Alice Coding 不要求固定任务目录。默认规则是：**任务书所在目录就是工作目录**。
+
+```bash
+mkdir -p ~/Projects/todo-app
+$EDITOR ~/Projects/todo-app/task.md
+```
+
+示例任务书：
+
+```markdown
+# Build a todo app
+
+## Goal
+Create a small local web app for managing todos.
+
+## Requirements
+- Add, complete, edit, and delete todos.
+- Persist data locally.
+- Keep the UI usable on mobile and desktop.
+
+## Acceptance Criteria
+- The app runs locally.
+- Core todo actions work.
+- A relevant build, test, or smoke check passes.
+```
+
+## 3. 预览执行
+
+建议真实执行前先 dry-run：
+
+```bash
+vibe exec ~/Projects/todo-app/task.md --agent codex --mode workspace --dry-run
+```
+
+这会生成执行计划并展示将要调用的 `agent-runner` 命令，但不会真正启动 Agent。
+
+## 4. 启动闭环执行
+
+```bash
+vibe exec ~/Projects/todo-app/task.md --agent codex --mode workspace
+```
+
+因为任务书在 `~/Projects/todo-app/` 里，Agent 会默认在这个目录创建或修改项目。
+
+如果任务书和项目目录不在一起，显式指定工作目录：
+
+```bash
+vibe exec ~/Desktop/task.md --cwd ~/Projects/todo-app --agent codex --mode workspace
+```
+
+## 5. 配置 Codex 和 Claude Code
+
+Alice Coding 可以通过 MCP server 给 Agent 提供项目上下文、skills、验证和参考项目能力。你可以把这些 MCP server 配置到 Codex 或 Claude Code 中。
 
 Codex 示例：
 
@@ -74,78 +126,25 @@ Claude Code 示例：
 }
 ```
 
-## 3. 初始化一个项目
+## 6. 结构化项目流程
 
-进入你的项目目录：
+如果你希望长期沉淀项目记忆，可以初始化 `.project-ops/`：
 
 ```bash
-cd /path/to/your-project
+cd ~/Projects/todo-app
 vibe bootstrap --cwd . --fix
-```
-
-这会在项目下创建：
-
-```text
-.project-ops/
-.agent-runs/   # 在第一次运行 agent 后出现
-```
-
-## 4. 导入需求文档
-
-```bash
 vibe ingest ./requirements.md --type requirements --cwd .
-vibe index --cwd .
-```
-
-也可以导入产品说明：
-
-```bash
-vibe ingest ./product-notes.md --type product --cwd .
-```
-
-## 5. 创建任务
-
-```bash
 vibe task create TASK-001 "实现 MVP" --goal "根据需求文档完成 MVP" --cwd .
-```
-
-## 6. 预览 Agent 执行
-
-建议真实执行前先 dry-run：
-
-```bash
-vibe run TASK-001 --agent claude --mode workspace --cwd . --dry-run
-```
-
-## 7. 启动闭环执行
-
-```bash
-vibe run TASK-001 --agent claude --mode workspace --cwd .
-```
-
-你也可以使用 Codex：
-
-```bash
+vibe run TASK-001 --agent codex --mode workspace --cwd . --dry-run
 vibe run TASK-001 --agent codex --mode workspace --cwd .
-```
-
-## 8. 审查和沉淀经验
-
-```bash
-vibe review --last-run --strict --diff --cwd .
-vibe learn --last-run --cwd .
-vibe archive --cwd . --keep 10 --older-than-days 14
 ```
 
 ## 推荐流程
 
 ```text
-准备需求文档
-  -> vibe bootstrap
-  -> vibe ingest
-  -> vibe task create
-  -> vibe run --dry-run
-  -> vibe run
-  -> vibe review
-  -> vibe learn
+最快路径：
+  新建文件夹 -> 放入 task.md -> vibe exec --dry-run -> vibe exec
+
+长期项目：
+  bootstrap -> ingest -> task create -> run --dry-run -> run -> review -> learn
 ```

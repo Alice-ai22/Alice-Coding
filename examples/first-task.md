@@ -1,14 +1,22 @@
-# TASK-001: 第一个 Alice Coding 任务
+# Build a Small Todo App
 
 ## Goal
 
-创建一个小型文档改动，用于验证本地 Alice Coding 闭环是否正常工作。
+Create a small local todo web app in this folder.
 
-## Scope
+## Requirements
 
-- 只创建或更新 `docs/alice-coding-smoke-test.md`。
+- Add, complete, edit, and delete todos.
+- Persist todos locally in the browser.
+- Keep the UI clean and usable on mobile and desktop.
+- Include a simple empty state.
 
-## Verification
+## Acceptance Criteria
 
-- 确认文件存在。
-- 确认文件包含任务目标、执行结果和下一步建议。
+- The app can be started locally.
+- Core todo actions work.
+- A relevant build, test, or smoke check passes.
+
+## Notes for Alice Coding
+
+If this task file is passed to `vibe exec` without `--cwd`, use this file's parent directory as the project working directory. If the folder is empty, create the project here.

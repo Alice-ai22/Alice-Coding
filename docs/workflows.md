@@ -1,6 +1,25 @@
 # 常用工作流
 
-## 基础闭环
+## 任务书快速闭环
+
+Alice Coding 的默认入口是任务书，且不要求固定文件夹。
+
+```bash
+mkdir -p ~/Projects/my-app
+$EDITOR ~/Projects/my-app/task.md
+vibe exec ~/Projects/my-app/task.md --agent codex --mode workspace --dry-run
+vibe exec ~/Projects/my-app/task.md --agent codex --mode workspace
+```
+
+默认规则：如果没有传 `--cwd`，`vibe exec` 会把任务书所在目录作为工作目录。适合“新建一个文件夹，把任务书放进去，让 Agent 在这个文件夹里创建项目”的场景。
+
+如果任务书在别处：
+
+```bash
+vibe exec ~/Desktop/task.md --cwd ~/Projects/my-app --agent codex --mode workspace
+```
+
+## 结构化项目闭环
 
 ```bash
 vibe bootstrap --cwd . --fix
@@ -11,7 +30,7 @@ vibe review --last-run --strict --diff --cwd .
 vibe learn --last-run --cwd .
 ```
 
-这条流程适合大多数项目任务：先初始化项目记忆，再导入需求，创建任务，启动 Agent，最后审查和沉淀经验。
+这条流程适合长期项目：先初始化项目记忆，再导入需求，创建任务，启动 Agent，最后审查和沉淀经验。
 
 ## 添加 GitHub 参考项目
 
@@ -34,6 +53,7 @@ vibe run TASK-001 --agent claude --mode read-only --cwd .
 ## 工作区编辑模式
 
 ```bash
+vibe exec ./task.md --agent codex --mode workspace
 vibe run TASK-001 --agent claude --mode workspace --cwd .
 ```
 
@@ -58,8 +78,8 @@ vibe archive --cwd . --keep 10 --older-than-days 14
 ## 推荐节奏
 
 ```text
-小任务：
-  requirements -> task -> run -> verify -> learn
+最快路径：
+  task.md -> exec dry-run -> exec -> verify -> summary
 
 中大型任务：
   requirements -> product notes -> references -> plan -> dry-run -> run -> review -> learn

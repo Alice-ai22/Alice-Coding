@@ -36,6 +36,7 @@ Usage:
   vibe refs <search|fetch|add|list|context> [args] [options]
   vibe plan <task-id> <title> [options]
   vibe run <task-id|plan.md> [options]
+  vibe exec <task-file.md> [options]
   vibe review [task-id|run-name] [options]
   vibe learn [task-id|run-name] [options]
   vibe issue <task-id> [options]
@@ -46,7 +47,7 @@ Usage:
   vibe doctor
 
 Options:
-  --cwd <dir>              Project directory. Default: current directory.
+  --cwd <dir>              Project directory. Default: current directory; for vibe exec, defaults to the task file parent directory.
   --project-name <name>    Project name for vibe init.
   --goal <text>            Goal for vibe plan.
   --scope <text>           Scope for vibe plan.
@@ -85,6 +86,7 @@ Examples:
   vibe refs add https://github.com/example/repo --why "参考仪表盘信息架构" --cwd .
   vibe plan TASK-001 "Add login flow" --goal "Implement login" --cwd .
   vibe run TASK-001 --agent codex --cwd .
+  vibe exec ./task.md --agent codex --mode workspace
   vibe review TASK-001 --agent claude --dry-run
   vibe learn TASK-001 --title "Login flow run"
   vibe sync
@@ -106,6 +108,7 @@ function parseArgs(argv) {
   const options = {
     command,
     cwd: process.cwd(),
+    cwdProvided: false,
     projectName: undefined,
     goal: undefined,
     scope: "",
@@ -143,7 +146,10 @@ function parseArgs(argv) {
       return value;
     };
 
-    if (arg === "--cwd") options.cwd = path.resolve(next());
+    if (arg === "--cwd") {
+      options.cwd = path.resolve(next());
+      options.cwdProvided = true;
+    }
     else if (arg === "--project-name") options.projectName = next();
     else if (arg === "--goal") options.goal = next();
     else if (arg === "--scope") options.scope = next();
@@ -684,6 +690,72 @@ function commandRun(options) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
+function commandExec(options) {
+  const [taskFileInput] = options.positionals;
+  if (!taskFileInput) fail("Missing task file path.");
+  if (!existsSync(AGENT_RUNNER)) fail(`agent-runner not found: ${AGENT_RUNNER}`);
+
+  const taskFile = path.resolve(process.cwd(), taskFileInput);
+  if (!existsSync(taskFile)) fail(`Task file not found: ${taskFile}`);
+  if (!statSync(taskFile).isFile()) fail(`Task file is not a file: ${taskFile}`);
+
+  const projectDir = options.cwdProvided ? options.cwd : path.dirname(taskFile);
+  if (!existsSync(projectDir)) fail(`Project directory not found: ${projectDir}`);
+
+  const taskContent = readFileSync(taskFile, "utf8");
+  const title = taskContent.split("\n").find((line) => line.startsWith("#"))?.replace(/^#+\s*/, "").trim() || path.basename(taskFile, path.extname(taskFile));
+  const planDir = path.join(projectDir, ".project-ops", "plans");
+  mkdirSync(planDir, { recursive: true });
+  const planPath = path.join(planDir, `exec-${slug(path.basename(taskFile, path.extname(taskFile)))}.md`);
+  const inferred = options.cwdProvided ? "explicit --cwd" : "task file parent directory";
+  const plan = [
+    `# Execute Task File: ${title}`,
+    "",
+    "## Goal",
+    "",
+    "Complete all work requested by the task file in the target project directory. Treat the task file as the source of truth.",
+    "",
+    "## Execution Rules",
+    "",
+    `- Task file: ${taskFile}`,
+    `- Working directory: ${projectDir}`,
+    `- Working directory source: ${inferred}`,
+    "- If the working directory is empty or has no app yet, create the project in this directory.",
+    "- If the working directory already contains a project, preserve unrelated user changes and follow existing conventions.",
+    "- Read project context first, including `.project-ops/` when present.",
+    "- Implement the requested work end to end within the working directory.",
+    "- Run the smallest relevant verification command available. If verification fails, fix and rerun when feasible.",
+    "- Summarize changed files, verification results, and any residual risks at the end.",
+    "",
+    "## Task File Content",
+    "",
+    "```markdown",
+    taskContent.trim(),
+    "```",
+    ""
+  ].join("\n");
+  writeFileSync(planPath, plan);
+
+  const args = [options.agent, planPath, "--cwd", projectDir];
+  if (options.dryRun) args.push("--dry-run");
+  if (options.name) args.push("--name", options.name);
+  else args.push("--name", `exec-${slug(path.basename(taskFile, path.extname(taskFile)))}`);
+  if (options.maxTurns) args.push("--max-turns", options.maxTurns);
+  if (options.mode) args.push("--mode", options.mode);
+
+  console.log(`Task file: ${taskFile}`);
+  console.log(`Working directory: ${projectDir}`);
+  console.log(`Generated plan: ${planPath}`);
+  console.log(`Running: ${AGENT_RUNNER} ${args.join(" ")}`);
+  const result = spawnSync(AGENT_RUNNER, args, {
+    cwd: projectDir,
+    encoding: "utf8",
+    stdio: "inherit"
+  });
+  if (result.error) fail(result.error.message);
+  if (result.status !== 0) process.exit(result.status ?? 1);
+}
+
 function commandReview(options) {
   const [identifier] = options.lastRun ? ["last"] : options.positionals;
   if (!existsSync(AGENT_RUNNER)) fail(`agent-runner not found: ${AGENT_RUNNER}`);
@@ -958,6 +1030,7 @@ function run() {
   else if (options.command === "refs") commandRefs(options);
   else if (options.command === "plan") commandPlan(options);
   else if (options.command === "run") commandRun(options);
+  else if (options.command === "exec") commandExec(options);
   else if (options.command === "review") commandReview(options);
   else if (options.command === "learn") commandLearn(options);
   else if (options.command === "issue") commandIssue(options);

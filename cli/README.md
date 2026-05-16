@@ -7,9 +7,17 @@ Alice Coding 包含两个主要命令行工具：
 
 ## `vibe`
 
-主工作流入口，用于初始化项目、导入文档、创建任务、启动 Agent、审查结果、记录经验和管理参考项目。
+主工作流入口，用于从任务书执行、初始化项目、导入文档、创建任务、启动 Agent、审查结果、记录经验和管理参考项目。
 
-示例：
+最快入口：
+
+```bash
+vibe exec ./task.md --agent codex --mode workspace
+```
+
+如果没有传 `--cwd`，`vibe exec` 默认把任务书所在目录作为工作目录。
+
+结构化项目示例：
 
 ```bash
 vibe bootstrap --cwd . --fix

@@ -4,7 +4,17 @@ Alice Coding 分为三层：项目层、工具层、Agent 层。
 
 ## 1. 项目层
 
-每个目标项目都拥有自己的上下文和运行记录：
+每个目标项目都拥有自己的任务书、上下文和运行记录。
+
+最小形态可以只有一个任务书：
+
+```text
+task.md
+```
+
+当使用 `vibe exec task.md` 且没有传 `--cwd` 时，任务书所在目录就是项目工作目录。
+
+长期项目可以拥有完整上下文：
 
 ```text
 .project-ops/
@@ -21,19 +31,23 @@ Alice Coding 分为三层：项目层、工具层、Agent 层。
 
 Alice Coding 仓库提供这些工具：
 
-- `vibe`：面向用户的主工作流 CLI。
+- `vibe`：面向用户的主工作流 CLI，可从任务书或任务 ID 启动执行。
 - `agent-runner`：从计划文件启动 Codex / Claude Code 执行任务。
 - `skills` MCP：搜索和读取本地 skills。
 - `project-ops` MCP：读取和维护项目记忆。
 - `verification` MCP：选择和记录验证命令。
 - `reference` MCP：搜索和登记 GitHub 参考项目。
 
+`vibe exec` 会把任务书转换成 `.project-ops/plans/exec-*.md`，再调用 `agent-runner`。
+
 ## 3. Agent 层
 
 Codex 或 Claude Code 会读取计划文件和项目上下文，然后执行任务：
 
 ```text
-plan.md
+task.md
+  -> vibe exec
+  -> generated plan.md
   -> agent-runner
   -> Codex / Claude Code
   -> MCP context

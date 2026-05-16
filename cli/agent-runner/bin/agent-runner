@@ -171,6 +171,24 @@ function ensureReadableFile(filePath, label) {
   if (!existsSync(filePath)) fail(`${label} not found: ${filePath}`);
 }
 
+function resolveExecutable(command, label) {
+  if (command.includes(path.sep) || path.isAbsolute(command)) {
+    if (!existsSync(command)) fail(`${label} not found: ${command}`);
+    return command;
+  }
+
+  const pathEntries = (process.env.PATH || "").split(path.delimiter).filter(Boolean);
+  for (const entry of pathEntries) {
+    const candidate = path.join(entry, command);
+    if (existsSync(candidate)) return candidate;
+  }
+
+  const homeLocal = path.join(homedir(), ".local", "bin", command);
+  if (existsSync(homeLocal)) return homeLocal;
+
+  fail(`${label} not found on PATH: ${command}`);
+}
+
 function run() {
   const options = parseArgs(process.argv.slice(2));
   ensureReadableFile(options.planPath, "Plan file");
@@ -200,8 +218,7 @@ function run() {
   let args;
 
   if (options.target === "codex") {
-    ensureReadableFile(options.codexBin, "Codex binary");
-    command = options.codexBin;
+    command = resolveExecutable(options.codexBin, "Codex binary");
     args = ["exec", "--output-last-message", summaryPath];
     const codexMode = options.executionMode === "workspace" ? "workspace-write" : options.executionMode === "read-only" ? "read-only" : options.codexMode;
     if (codexMode === "full-auto") args.push("--full-auto");
@@ -209,8 +226,7 @@ function run() {
     else if (codexMode === "read-only") args.push("--sandbox", "read-only");
     else fail(`Unsupported --codex-mode "${options.codexMode}".`);
   } else {
-    ensureReadableFile(options.claudeBin, "Claude binary");
-    command = options.claudeBin;
+    command = resolveExecutable(options.claudeBin, "Claude binary");
     args = ["-p", "--permission-mode", options.claudeMode, "--output-format", "text"];
     if (existsSync(options.claudeMcp)) args.push("--mcp-config", options.claudeMcp);
     if (options.maxTurns) args.push("--max-turns", options.maxTurns);

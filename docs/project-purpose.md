@@ -2,12 +2,13 @@
 
 Alice Coding 的作用可以用一句话概括：
 
-> 给 AI 编程 Agent 一个本地项目操作层，让它不再只是在聊天框里回答问题，而是能围绕一个项目读取上下文、执行计划、验证结果并沉淀经验。
+> 给 AI 编程 Agent 一个任务书驱动的本地项目操作层，让它不再只是在聊天框里回答问题，而是能在指定文件夹里读取上下文、执行任务、验证结果并沉淀经验。
 
 ## 它解决什么问题
 
 AI 编程工具本身已经很强，但真实项目里经常遇到这些问题：
 
+- 用户想做一个软件，却还要先解释项目应该放在哪里、怎么开始。
 - 需求文档和产品说明散落在不同地方。
 - 每次对话都要重新解释项目背景。
 - skills 需要人工手动提醒使用。
@@ -21,6 +22,8 @@ Alice Coding 把这些问题整理成一个本地工作流。
 
 Alice Coding 提供：
 
+- 任务书执行：用 `vibe exec <task-file.md>` 从任意任务书启动闭环执行。
+- 默认工作目录：未显式指定 `--cwd` 时，任务书所在目录就是 Agent 工作目录。
 - 项目记忆：用 `.project-ops/` 保存需求、产品说明、任务、规则、决策和经验。
 - 闭环执行：用 `agent-runner` 把计划文件交给 Codex 或 Claude Code 执行。
 - 工作流入口：用 `vibe` 管理初始化、导入、任务、运行、审查、学习和归档。
@@ -42,18 +45,27 @@ Alice Coding 不是：
 
 ## 推荐使用方式
 
-1. 在项目里准备需求文档。
-2. 用 `vibe bootstrap` 初始化项目记忆。
-3. 用 `vibe ingest` 导入需求。
-4. 用 `vibe task create` 创建任务。
-5. 用 `vibe run --dry-run` 预览执行。
-6. 用 `vibe run` 启动 Agent。
-7. 用 `vibe review` 审查结果。
-8. 用 `vibe learn` 沉淀经验。
+最快路径：
+
+1. 新建一个项目文件夹。
+2. 把任务书保存为 `task.md`。
+3. 运行 `vibe exec ./task.md --agent codex --mode workspace --dry-run`。
+4. 确认后运行 `vibe exec ./task.md --agent codex --mode workspace`。
+
+长期项目：
+
+1. 用 `vibe bootstrap` 初始化项目记忆。
+2. 用 `vibe ingest` 导入需求。
+3. 用 `vibe task create` 创建任务。
+4. 用 `vibe run --dry-run` 预览执行。
+5. 用 `vibe run` 启动 Agent。
+6. 用 `vibe review` 审查结果。
+7. 用 `vibe learn` 沉淀经验。
 
 ## 设计原则
 
 - 本地优先：项目上下文默认保存在本地。
+- 任务书优先：先让用户能从一个文件自然开始。
 - 可读优先：尽量使用 Markdown 和 JSON。
 - 可验证：任务完成要有验证记录。
 - 可复盘：每次执行要有运行记录。

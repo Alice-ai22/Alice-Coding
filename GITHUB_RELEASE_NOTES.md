@@ -1,18 +1,13 @@
 # Alice Coding v0.1.0
 
-Alice Coding 是一个本地优先的 AI 编程工作流套件，面向 Codex、Claude Code 和 MCP Agent。
+Alice Coding is a local-first AI coding workflow toolkit for Codex, Claude Code, and MCP-based project context.
 
-这个版本提供了从需求文档到 Agent 闭环执行的基础能力：
+Highlights:
 
-- 项目本地记忆 `.project-ops/`
-- Agent 运行记录 `.agent-runs/`
-- skills 自动检索
-- project-ops 项目上下文
-- verification 验证选择和记录
-- reference GitHub 参考项目登记
-- `vibe` 工作流 CLI
-- `agent-runner` 执行器
+- Start from a task file with `vibe exec <task-file.md>`.
+- By default, the task file's parent directory is the Agent working directory.
+- Keep project memory, plans, verification, references, and learnings under `.project-ops/`.
+- Launch Codex or Claude Code through `agent-runner`.
+- Use MCP servers for skills, project context, verification selection, and GitHub references.
 
-推荐从 README 和 `docs/quickstart.md` 开始。
-
-> 当前版本仍处于早期阶段，建议先在测试项目中使用。
+This is an early public version focused on making local Agent workflows repeatable, inspectable, and easier to explain.
