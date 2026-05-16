@@ -23,6 +23,8 @@ Alice Coding 把这些问题整理成一个本地工作流。
 Alice Coding 提供：
 
 - 任务书执行：用 `vibe exec <task-file.md>` 从任意任务书启动闭环执行。
+- 任务书模板：用 `vibe task-template` 生成不同场景的任务书。
+- 任务书检查：用 `vibe check-task` 在执行前检查目标、要求、验收标准和验证方式。
 - 默认工作目录：未显式指定 `--cwd` 时，任务书所在目录就是 Agent 工作目录。
 - 项目记忆：用 `.project-ops/` 保存需求、产品说明、任务、规则、决策和经验。
 - 闭环执行：用 `agent-runner` 把计划文件交给 Codex 或 Claude Code 执行。
@@ -48,9 +50,10 @@ Alice Coding 不是：
 最快路径：
 
 1. 新建一个项目文件夹。
-2. 把任务书保存为 `task.md`。
-3. 运行 `vibe exec ./task.md --agent codex --mode workspace --dry-run`。
-4. 确认后运行 `vibe exec ./task.md --agent codex --mode workspace`。
+2. 用 `vibe task-template default ./task.md` 生成任务书。
+3. 用 `vibe check-task ./task.md` 检查任务书质量。
+4. 运行 `vibe exec ./task.md --agent codex --mode workspace --dry-run`。
+5. 确认后运行 `vibe exec ./task.md --agent codex --mode workspace`。
 
 长期项目：
 

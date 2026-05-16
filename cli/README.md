@@ -12,6 +12,9 @@ Alice Coding 包含两个主要命令行工具：
 最快入口：
 
 ```bash
+vibe task-template web-app ./task.md
+$EDITOR ./task.md
+vibe check-task ./task.md
 vibe exec ./task.md --agent codex --mode workspace
 ```
 

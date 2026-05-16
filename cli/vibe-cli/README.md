@@ -7,6 +7,9 @@
 ## 最快入口：任务书执行
 
 ```bash
+vibe task-template web-app ./task.md
+$EDITOR ./task.md
+vibe check-task ./task.md
 vibe exec ./task.md --agent codex --mode workspace
 ```
 
@@ -25,6 +28,8 @@ vibe exec ~/Projects/my-app/task.md --agent codex --mode workspace --dry-run
 
 `vibe exec` 会生成 `.project-ops/plans/exec-*.md`，再调用 `agent-runner`。
 
+`vibe task-template list` 可以查看内置任务书模板，包括 `default`、`web-app`、`bugfix`、`docs` 和 `release`。
+
 ## 常用命令
 
 ```bash
@@ -35,6 +40,9 @@ vibe ingest ./prd.md --type requirements --cwd .
 vibe index --cwd .
 vibe task create TASK-001 "实现登录流程" --goal "根据需求完成登录功能" --cwd .
 vibe task list --cwd .
+vibe task-template list
+vibe task-template default ./task.md
+vibe check-task ./task.md
 vibe rules propose "每次 build 前先运行 lint" --cwd .
 vibe rules accept RULE-001 --cwd .
 vibe plan TASK-001 "实现登录流程" --goal "完成登录功能" --cwd .
@@ -74,6 +82,8 @@ vibe doctor --cwd .
 ## 命令说明
 
 - `vibe exec`：从任意任务书启动闭环执行；未传 `--cwd` 时默认使用任务书所在目录。
+- `vibe task-template`：列出任务书模板，或复制模板到指定文件。
+- `vibe check-task`：检查任务书是否包含目标、要求、验收标准、验证方式和输出要求。
 - `vibe bootstrap --fix`：检查本地 Alice Coding 工具链，并在缺失时初始化 `.project-ops/`。
 - `vibe ingest`：把需求、产品说明或计划文档复制到 `.project-ops/` 并刷新索引。
 - `vibe task`：创建、列出、查看下一个任务或标记任务完成。

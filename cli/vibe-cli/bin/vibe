@@ -34,6 +34,8 @@ Usage:
   vibe index [options]
   vibe rules <propose|list|accept|reject> [args] [options]
   vibe refs <search|fetch|add|list|context> [args] [options]
+  vibe task-template [list|<name> [output.md]] [options]
+  vibe check-task <task-file.md> [options]
   vibe plan <task-id> <title> [options]
   vibe run <task-id|plan.md> [options]
   vibe exec <task-file.md> [options]
@@ -84,6 +86,9 @@ Examples:
   vibe rules propose "Always run lint before build" --cwd .
   vibe refs search "nextjs dashboard shadcn" --language TypeScript --cwd .
   vibe refs add https://github.com/example/repo --why "参考仪表盘信息架构" --cwd .
+  vibe task-template list
+  vibe task-template default ./task.md
+  vibe check-task ./task.md
   vibe plan TASK-001 "Add login flow" --goal "Implement login" --cwd .
   vibe run TASK-001 --agent codex --cwd .
   vibe exec ./task.md --agent codex --mode workspace
@@ -303,6 +308,87 @@ function keywordList(text) {
     .filter((word) => word.length >= 3)
     .slice(0, 200);
   return [...new Set(words)].slice(0, 20);
+}
+
+function taskTemplateDir() {
+  return path.join(REPO_ROOT, "templates", "tasks");
+}
+
+function listTaskTemplates() {
+  const dir = taskTemplateDir();
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+    .map((entry) => entry.name.replace(/\.md$/, ""))
+    .sort();
+}
+
+function resolveTaskTemplate(name) {
+  const templateName = name.endsWith(".md") ? name : `${name}.md`;
+  const file = path.join(taskTemplateDir(), templateName);
+  if (!existsSync(file)) fail(`Task template not found: ${name}. Available: ${listTaskTemplates().join(", ") || "none"}`);
+  return file;
+}
+
+function sectionPresent(text, patterns) {
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+function headingPattern(...names) {
+  return new RegExp(`^##\\s*(?:${names.join("|")})(?:\\s|$)`, "im");
+}
+
+function taskCheck(taskFile) {
+  const content = readFileSync(taskFile, "utf8");
+  const checks = [
+    {
+      id: "title",
+      label: "Task title",
+      ok: /^#\s+\S+/m.test(content),
+      hint: "Add a top-level # title."
+    },
+    {
+      id: "goal",
+      label: "Goal",
+      ok: sectionPresent(content, [headingPattern("任务目标", "目标", "Goal")]),
+      hint: "Add a Goal / 任务目标 section describing the desired outcome."
+    },
+    {
+      id: "requirements",
+      label: "Requirements",
+      ok: sectionPresent(content, [headingPattern("具体要求", "功能要求", "Requirements", "Scope")]),
+      hint: "Add concrete requirements, scope, or requested changes."
+    },
+    {
+      id: "acceptance",
+      label: "Acceptance criteria",
+      ok: sectionPresent(content, [headingPattern("验收标准", "Acceptance Criteria", "Definition of Done")]),
+      hint: "Add acceptance criteria so the agent knows what done means."
+    },
+    {
+      id: "verification",
+      label: "Verification",
+      ok: sectionPresent(content, [headingPattern("验证要求", "验证方式", "Verification")]),
+      hint: "Add expected build, test, lint, or smoke-check guidance."
+    },
+    {
+      id: "output",
+      label: "Output requirements",
+      ok: sectionPresent(content, [headingPattern("输出要求", "Output")]),
+      hint: "Add an output section requesting changed files, verification, risks, and next steps."
+    }
+  ];
+  const placeholderLines = content
+    .split("\n")
+    .filter((line) => /^-\s*$/.test(line.trim()) || /\b(TODO|TBD)\b|待补充/.test(line));
+  const passed = checks.filter((check) => check.ok).length;
+  return {
+    task_file: taskFile,
+    ready: checks.every((check) => check.ok) && placeholderLines.length === 0,
+    score: `${passed}/${checks.length}`,
+    checks,
+    placeholder_lines: placeholderLines.length
+  };
 }
 
 function resolvePlan(cwd, identifier) {
@@ -651,6 +737,71 @@ function commandRefs(options) {
   fail(`Unknown refs subcommand "${subcommand}".`);
 }
 
+function commandTaskTemplate(options) {
+  const [nameOrList, outputPath] = options.positionals;
+  const templates = listTaskTemplates();
+
+  if (!nameOrList || nameOrList === "list") {
+    if (options.json) {
+      console.log(JSON.stringify({ templates }, null, 2));
+      return;
+    }
+    console.log("# Task Templates\n");
+    for (const template of templates) console.log(`- ${template}`);
+    console.log("\nUse: vibe task-template <name> [output.md]");
+    return;
+  }
+
+  const templatePath = resolveTaskTemplate(nameOrList);
+  const content = readFileSync(templatePath, "utf8");
+
+  if (!outputPath) {
+    console.log(content.trimEnd());
+    return;
+  }
+
+  const target = path.resolve(process.cwd(), outputPath);
+  if (existsSync(target)) fail(`Output file already exists: ${target}`);
+  mkdirSync(path.dirname(target), { recursive: true });
+  writeFileSync(target, content);
+
+  if (options.json) {
+    console.log(JSON.stringify({ template: nameOrList, output: target }, null, 2));
+  } else {
+    console.log("# Task Template Created\n");
+    console.log(`Template: ${nameOrList}`);
+    console.log(`Output: ${target}`);
+    console.log(`Next: vibe check-task ${target}`);
+  }
+}
+
+function commandCheckTask(options) {
+  const [taskFileInput] = options.positionals;
+  if (!taskFileInput) fail("Missing task file path.");
+  const taskFile = path.resolve(process.cwd(), taskFileInput);
+  if (!existsSync(taskFile)) fail(`Task file not found: ${taskFile}`);
+  if (!statSync(taskFile).isFile()) fail(`Task file is not a file: ${taskFile}`);
+
+  const result = taskCheck(taskFile);
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  console.log("# Task File Check\n");
+  console.log(`File: ${result.task_file}`);
+  console.log(`Score: ${result.score}`);
+  console.log(`Status: ${result.ready ? "ready" : "needs work"}`);
+  console.log("");
+  for (const check of result.checks) {
+    console.log(`- ${check.ok ? "ok" : "missing"} ${check.label}`);
+    if (!check.ok) console.log(`  ${check.hint}`);
+  }
+  if (result.placeholder_lines > 0) {
+    console.log(`- warning Placeholder or empty bullet lines: ${result.placeholder_lines}`);
+  }
+}
+
 function commandPlan(options) {
   const [taskId, ...titleParts] = options.positionals;
   const title = titleParts.join(" ").trim();
@@ -703,11 +854,13 @@ function commandExec(options) {
   if (!existsSync(projectDir)) fail(`Project directory not found: ${projectDir}`);
 
   const taskContent = readFileSync(taskFile, "utf8");
+  const check = taskCheck(taskFile);
   const title = taskContent.split("\n").find((line) => line.startsWith("#"))?.replace(/^#+\s*/, "").trim() || path.basename(taskFile, path.extname(taskFile));
   const planDir = path.join(projectDir, ".project-ops", "plans");
   mkdirSync(planDir, { recursive: true });
   const planPath = path.join(planDir, `exec-${slug(path.basename(taskFile, path.extname(taskFile)))}.md`);
   const inferred = options.cwdProvided ? "explicit --cwd" : "task file parent directory";
+  const completionReport = readOptional(path.join(REPO_ROOT, "templates", "reports", "completion-report.md")).trim();
   const plan = [
     `# Execute Task File: ${title}`,
     "",
@@ -726,14 +879,23 @@ function commandExec(options) {
     "- Implement the requested work end to end within the working directory.",
     "- Run the smallest relevant verification command available. If verification fails, fix and rerun when feasible.",
     "- Summarize changed files, verification results, and any residual risks at the end.",
+    "- Use the completion report structure below for the final response when possible.",
+    "",
+    "## Task Quality Check",
+    "",
+    `- Score: ${check.score}`,
+    `- Status: ${check.ready ? "ready" : "needs work"}`,
+    ...check.checks.filter((item) => !item.ok).map((item) => `- Missing ${item.label}: ${item.hint}`),
+    check.placeholder_lines > 0 ? `- Warning: ${check.placeholder_lines} placeholder or empty bullet lines remain in the task file.` : null,
     "",
     "## Task File Content",
     "",
     "```markdown",
     taskContent.trim(),
     "```",
+    completionReport ? "\n## Completion Report Format\n\n~~~markdown\n" + completionReport + "\n~~~" : null,
     ""
-  ].join("\n");
+  ].filter((line) => line !== null).join("\n");
   writeFileSync(planPath, plan);
 
   const args = [options.agent, planPath, "--cwd", projectDir];
@@ -746,6 +908,7 @@ function commandExec(options) {
   console.log(`Task file: ${taskFile}`);
   console.log(`Working directory: ${projectDir}`);
   console.log(`Generated plan: ${planPath}`);
+  if (!check.ready) console.log(`Task check: ${check.score}, needs work; continuing with best effort.`);
   console.log(`Running: ${AGENT_RUNNER} ${args.join(" ")}`);
   const result = spawnSync(AGENT_RUNNER, args, {
     cwd: projectDir,
@@ -1028,6 +1191,8 @@ function run() {
   else if (options.command === "index") commandIndex(options);
   else if (options.command === "rules") commandRules(options);
   else if (options.command === "refs") commandRefs(options);
+  else if (options.command === "task-template") commandTaskTemplate(options);
+  else if (options.command === "check-task") commandCheckTask(options);
   else if (options.command === "plan") commandPlan(options);
   else if (options.command === "run") commandRun(options);
   else if (options.command === "exec") commandExec(options);

@@ -24,4 +24,4 @@ project-memory
 
 ## About
 
-Alice Coding 是一个面向 AI Agent 编程的本地工作流套件。用户可以把任务书放进目标项目文件夹，然后通过 `vibe exec` 让 Agent 默认在该目录中读取上下文、生成计划、修改项目、运行验证并记录结果；也可以显式指定工作目录。长期项目还可以使用 `.project-ops/` 沉淀需求、任务、决策、参考项目和经验。
+Alice Coding 是一个面向 AI Agent 编程的本地工作流套件。用户可以用 `vibe task-template` 生成任务书，用 `vibe check-task` 检查任务书质量，再通过 `vibe exec` 让 Agent 默认在任务书所在目录中读取上下文、生成计划、修改项目、运行验证并记录结果；也可以显式指定工作目录。长期项目还可以使用 `.project-ops/` 沉淀需求、任务、决策、参考项目和经验。

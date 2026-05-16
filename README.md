@@ -32,6 +32,8 @@ Alice Coding 是一套任务书驱动的本地 AI 编程工作流：让 Codex / 
 
 ## 它能做什么
 
+- 用 `vibe task-template` 生成不同场景的任务书模板。
+- 用 `vibe check-task` 检查任务书是否具备目标、要求、验收标准和验证方式。
 - 直接用 `vibe exec <task-file.md>` 从任务书启动闭环执行。
 - 默认把任务书所在目录作为项目工作目录。
 - 把需求文档、产品说明、任务计划和经验沉淀统一放进 `.project-ops/`。
@@ -63,7 +65,7 @@ Alice Coding 是一套任务书驱动的本地 AI 编程工作流：让 Codex / 
 - `mcp/project-ops-mcp-server`：管理项目需求、产品说明、计划、任务、决策、规则、验证和经验。
 - `mcp/verification-mcp-server`：根据任务和项目选择最小有效验证命令，并记录结果。
 - `mcp/reference-mcp-server`：搜索并登记 GitHub 参考项目。
-- `templates/`：计划模板、项目记忆模板、Agent 规则模板。
+- `templates/`：任务书模板、计划模板、完成报告模板、Agent 规则模板和 Alice Coding skill 模板。
 - `docs/`：安装、配置、架构、MCP 和工作流说明。
 
 ## 快速开始
@@ -78,7 +80,9 @@ cd Alice-coding
 
 ```bash
 mkdir -p ~/Projects/my-app
+vibe task-template web-app ~/Projects/my-app/task.md
 $EDITOR ~/Projects/my-app/task.md
+vibe check-task ~/Projects/my-app/task.md
 vibe exec ~/Projects/my-app/task.md --agent codex --mode workspace --dry-run
 vibe exec ~/Projects/my-app/task.md --agent codex --mode workspace
 ```

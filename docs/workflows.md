@@ -6,7 +6,9 @@ Alice Coding 的默认入口是任务书，且不要求固定文件夹。
 
 ```bash
 mkdir -p ~/Projects/my-app
+vibe task-template web-app ~/Projects/my-app/task.md
 $EDITOR ~/Projects/my-app/task.md
+vibe check-task ~/Projects/my-app/task.md
 vibe exec ~/Projects/my-app/task.md --agent codex --mode workspace --dry-run
 vibe exec ~/Projects/my-app/task.md --agent codex --mode workspace
 ```
@@ -79,7 +81,7 @@ vibe archive --cwd . --keep 10 --older-than-days 14
 
 ```text
 最快路径：
-  task.md -> exec dry-run -> exec -> verify -> summary
+  task-template -> check-task -> exec dry-run -> exec -> verify -> summary
 
 中大型任务：
   requirements -> product notes -> references -> plan -> dry-run -> run -> review -> learn
