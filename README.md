@@ -1,84 +1,28 @@
 # Alice Coding
 
-> 一个本地优先的 AI 编程工作流套件，让 Codex、Claude Code 和 MCP 工具从“一问一答”进入“读取上下文、执行任务、验证结果、沉淀经验”的闭环开发模式。
+> Task-file-driven local AI coding workflow for Codex, Claude Code, and MCP.
 
-Alice Coding 不是单个提示词，也不是单个 MCP。它是一套面向 AI Agent 编程的本地工作流，把项目记忆、技能检索、任务计划、执行器、验证策略、GitHub 参考项目和运行记录整合到一起。
+<p>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+  <a href="https://github.com/Alice-ai22/Alice-Coding/releases/tag/v0.1.0"><img alt="Release" src="https://img.shields.io/badge/release-v0.1.0-brightgreen.svg"></a>
+  <img alt="Node.js" src="https://img.shields.io/badge/node-%3E%3D18-339933.svg">
+  <img alt="Local first" src="https://img.shields.io/badge/local--first-yes-7c3aed.svg">
+  <img alt="MCP" src="https://img.shields.io/badge/MCP-ready-black.svg">
+</p>
 
-核心流程：
+Alice Coding lets you put a task file into a folder and ask an AI coding agent to work there. It turns Codex / Claude Code from a chat assistant into a local workflow that reads context, executes tasks, runs verification, and records what happened.
 
 ```text
-任务书 -> 工作目录 -> 项目上下文 -> Agent 执行 -> 验证检查 -> 经验沉淀
+task.md -> working directory -> project context -> agent execution -> verification -> run summary
 ```
 
-最简单的使用方式是：新建一个项目文件夹，把任务书放进去，然后把任务书交给 AI 或运行 `vibe exec`。默认情况下，**任务书所在目录就是 Agent 的工作目录**。
-
-## 项目定位
-
-Alice Coding 希望解决一个很现实的问题：AI 编程工具越来越强，但项目上下文经常散落在聊天记录、文档、终端、手动提示词和个人规则里。每次开始任务，都要重新解释需求、重新提醒使用哪些工具、重新粘贴报错、重新总结经验。
-
-Alice Coding 的目标是给每个项目一个可读、可维护、可复用的本地工作环境，让 Agent 能够：
-
-- 自动检索并读取相关 skills
-- 读取项目需求、产品说明、任务状态和历史决策
-- 根据任务书或计划文件进入闭环执行
-- 调用 Codex 或 Claude Code 作为本地执行 Agent
-- 选择并记录最小有效验证命令
-- 登记 GitHub 优质项目作为参考，而不是盲目复制代码
-- 保存每次运行日志、总结和可复用经验
-
-## 一句话介绍
-
-Alice Coding 是一套任务书驱动的本地 AI 编程工作流：让 Codex / Claude Code 在任务书所在目录或指定工作目录中读取上下文、执行任务、跑验证、记录结果，而不是只在聊天框里临时回答问题。
-
-## 它能做什么
-
-- 用 `vibe task-template` 生成不同场景的任务书模板。
-- 用 `vibe check-task` 检查任务书是否具备目标、要求、验收标准和验证方式。
-- 直接用 `vibe exec <task-file.md>` 从任务书启动闭环执行。
-- 默认把任务书所在目录作为项目工作目录。
-- 把需求文档、产品说明、任务计划和经验沉淀统一放进 `.project-ops/`。
-- 用 `vibe` 命令完成初始化、导入、任务、运行、审查、学习和归档。
-- 用 `agent-runner` 启动 Codex 或 Claude Code 执行闭环任务。
-- 通过 MCP 让 Agent 主动读取 skills、项目上下文、验证策略和参考项目。
-- 把每次运行记录保存到 `.agent-runs/`，方便复盘。
-
-## 它不能做什么
-
-- 它不是新的模型，也不替代 Codex 或 Claude Code。
-- 它不是云端项目管理平台，默认不上传你的项目记忆。
-- 它不能保证 Agent 永远正确完成任务，仍然需要人工审查。
-- 它不会自动授权复制第三方开源代码，外部项目只作为参考上下文。
-
-## 适合谁
-
-- 正在使用 Codex / Claude Code / 终端 Agent 的开发者
-- 想把 AI 编程从“聊天辅助”升级成“项目工作流”的人
-- 希望项目上下文长期沉淀在本地的人
-- 想搭建 MCP + skills + verification + agent runner 组合工作流的人
-- 想让 AI 更有结构地读需求、改代码、跑测试、修复问题的人
-
-## 核心组件
-
-- `cli/vibe-cli`：主工作流 CLI，负责从任务书执行、初始化项目、导入文档、创建任务、运行 Agent、审查、沉淀经验、管理参考项目和归档记录。
-- `cli/agent-runner`：从计划文件启动 Codex 或 Claude Code 的非交互执行模式。
-- `mcp/skills-mcp-server`：统一索引本地 Codex / Claude Code skills。
-- `mcp/project-ops-mcp-server`：管理项目需求、产品说明、计划、任务、决策、规则、验证和经验。
-- `mcp/verification-mcp-server`：根据任务和项目选择最小有效验证命令，并记录结果。
-- `mcp/reference-mcp-server`：搜索并登记 GitHub 参考项目。
-- `templates/`：任务书模板、计划模板、完成报告模板、Agent 规则模板和 Alice Coding skill 模板。
-- `docs/`：安装、配置、架构、MCP 和工作流说明。
-
-## 快速开始
+## Quick Demo
 
 ```bash
-git clone https://github.com/Alice-ai22/Alice-coding.git
-cd Alice-coding
+git clone https://github.com/Alice-ai22/Alice-Coding.git
+cd Alice-Coding
 ./scripts/install-local.sh
-```
 
-最快体验：新建一个文件夹，把任务书放进去。
-
-```bash
 mkdir -p ~/Projects/my-app
 vibe task-template web-app ~/Projects/my-app/task.md
 $EDITOR ~/Projects/my-app/task.md
@@ -87,37 +31,71 @@ vibe exec ~/Projects/my-app/task.md --agent codex --mode workspace --dry-run
 vibe exec ~/Projects/my-app/task.md --agent codex --mode workspace
 ```
 
-如果任务书不在项目目录里，可以显式指定工作目录：
+Default rule: **if `--cwd` is not provided, the task file's parent directory is the agent working directory.**
+
+If the task file lives somewhere else, pass the project directory explicitly:
 
 ```bash
 vibe exec ~/Desktop/task.md --cwd ~/Projects/my-app --agent codex --mode workspace
 ```
 
-进阶的结构化项目流程：
+## Why Alice Coding
 
-```bash
-vibe bootstrap --cwd . --fix
-vibe ingest ./requirements.md --type requirements --cwd .
-vibe task create TASK-001 "实现 MVP" --goal "根据需求文档完成 MVP" --cwd .
-vibe run TASK-001 --agent claude --mode workspace --cwd . --dry-run
-vibe run TASK-001 --agent claude --mode workspace --cwd .
+AI coding often gets stuck in a loop of repeated context: paste the requirement, explain the project, remind the agent how to verify, summarize the fix, then do it all again next time.
+
+Alice Coding gives each project a local operating layer:
+
+- task files for clear intent
+- `.project-ops/` for project memory
+- `.agent-runs/` for execution records
+- MCP servers for skills, project context, verification, and references
+- `agent-runner` for launching Codex or Claude Code in a repeatable way
+
+## Workflow
+
+```mermaid
+flowchart LR
+  A["task.md"] --> B["vibe check-task"]
+  B --> C["vibe exec"]
+  C --> D["generated plan"]
+  D --> E["agent-runner"]
+  E --> F["Codex / Claude Code"]
+  F --> G["file edits"]
+  G --> H["verification"]
+  H --> I[".agent-runs summary"]
 ```
 
-更多说明见：
+## What You Get
 
-- [快速开始](docs/quickstart.md)
-- [架构说明](docs/architecture.md)
-- [配置说明](docs/configuration.md)
-- [MCP Servers](docs/mcp-servers.md)
-- [项目作用说明](docs/project-purpose.md)
-- [任务书工作流](docs/task-file-workflow.md)
-- [常用工作流](docs/workflows.md)
-- [路线图](ROADMAP.md)
-- [开源发布检查清单](OPEN_SOURCE_CHECKLIST.md)
+| Area | What it does |
+| --- | --- |
+| `vibe task-template` | Creates task files from built-in templates. |
+| `vibe check-task` | Checks whether a task file has goal, requirements, acceptance criteria, verification, and output expectations. |
+| `vibe exec` | Converts a task file into an execution plan and launches an agent run. |
+| `vibe run` | Runs a structured `.project-ops` task by task id or plan path. |
+| `agent-runner` | Starts Codex or Claude Code with a generated prompt and run directory. |
+| `skills` MCP | Helps agents find and read local skills. |
+| `project-ops` MCP | Reads and maintains requirements, tasks, plans, decisions, rules, and learnings. |
+| `verification` MCP | Selects and records the smallest useful checks. |
+| `reference` MCP | Searches and registers GitHub references without blindly copying code. |
 
-## 项目记忆
+## Built-In Templates
 
-Alice Coding 会把项目自己的上下文保存在目标项目中：
+Task templates live in `templates/tasks/`:
+
+| Template | Use it for |
+| --- | --- |
+| `default` | General implementation tasks. |
+| `web-app` | Creating or improving a web app. |
+| `bugfix` | Reproducing, fixing, and verifying bugs. |
+| `docs` | Documentation updates. |
+| `release` | Release prep and public checklist work. |
+
+There is also a completion report template in `templates/reports/` and a reusable Alice Coding skill template in `templates/skills/alice-coding/`.
+
+## Project Memory
+
+Long-running projects can keep their context in `.project-ops/`:
 
 ```text
 .project-ops/
@@ -134,19 +112,76 @@ Alice Coding 会把项目自己的上下文保存在目标项目中：
 .agent-runs/
 ```
 
-这意味着 Alice Coding 仓库本身只保存通用工具和模板；每个项目的私有需求、运行记录和经验都保存在对应项目目录里。
+Alice Coding itself stays generic. Your private requirements, run logs, and learnings stay inside the target project folder.
 
-## 安全边界
+## Common Commands
 
-Alice Coding 是本地优先设计，不要求把项目记忆上传到云端。`reference` MCP 只把 GitHub 项目作为参考资料登记，不代表自动复制第三方代码。使用外部代码前，请自行检查 license 和安全风险。
+```bash
+# Fast path from a task file
+vibe task-template web-app ./task.md
+vibe check-task ./task.md
+vibe exec ./task.md --agent codex --mode workspace --dry-run
+vibe exec ./task.md --agent codex --mode workspace
 
-发布公开项目或 fork 前，请阅读 [SECURITY.md](SECURITY.md)。
+# Structured project workflow
+vibe bootstrap --cwd . --fix
+vibe ingest ./requirements.md --type requirements --cwd .
+vibe task create TASK-001 "Implement MVP" --goal "Build the MVP from requirements" --cwd .
+vibe run TASK-001 --agent codex --mode workspace --cwd .
+vibe review --last-run --strict --diff --cwd .
+vibe learn --last-run --cwd .
+```
 
-## 当前版本
+## Best For
 
-当前版本：`v0.1.0`
+- Developers using Codex, Claude Code, or terminal-based coding agents.
+- Local-first AI coding workflows.
+- Projects that need repeatable task execution and verification.
+- Teams or solo builders who want project context to survive beyond one chat.
 
-这是一个早期但可用的公开版本，重点是让本地 Agent 工作流变得可重复、可检查、可沉淀。
+## Not For
+
+- Replacing Codex, Claude Code, or human review.
+- Cloud project management.
+- Fully unsupervised production deployment.
+- Copying third-party open-source code without approval and license review.
+
+## Repository Map
+
+```text
+cli/
+  vibe-cli/          main workflow CLI
+  agent-runner/      Codex / Claude Code execution wrapper
+mcp/
+  skills-mcp-server/
+  project-ops-mcp-server/
+  verification-mcp-server/
+  reference-mcp-server/
+templates/
+  tasks/             task file templates
+  reports/           completion report template
+  skills/            reusable Alice Coding skill template
+docs/                quickstart, architecture, MCP, workflow docs
+```
+
+## Docs
+
+- [Quick Start](docs/quickstart.md)
+- [Task File Workflow](docs/task-file-workflow.md)
+- [Architecture](docs/architecture.md)
+- [Configuration](docs/configuration.md)
+- [MCP Servers](docs/mcp-servers.md)
+- [Project Purpose](docs/project-purpose.md)
+- [Common Workflows](docs/workflows.md)
+- [Roadmap](ROADMAP.md)
+- [Security](SECURITY.md)
+- [Contributing](CONTRIBUTING.md)
+
+## Status
+
+Current version: `v0.1.0`
+
+This is an early public version focused on making local agent workflows repeatable, inspectable, and easy to explain.
 
 ## License
 
