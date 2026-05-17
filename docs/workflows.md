@@ -5,12 +5,12 @@
 Alice Coding 的默认入口是任务书，且不要求固定文件夹。
 
 ```bash
-mkdir -p ~/Projects/my-app
-vibe task-template web-app ~/Projects/my-app/task.md
+vibe start ~/Projects/my-app web-app
 $EDITOR ~/Projects/my-app/task.md
 vibe check-task ~/Projects/my-app/task.md
 vibe exec ~/Projects/my-app/task.md --agent codex --mode workspace --dry-run
 vibe exec ~/Projects/my-app/task.md --agent codex --mode workspace
+vibe report --last-run --cwd ~/Projects/my-app
 ```
 
 默认规则：如果没有传 `--cwd`，`vibe exec` 会把任务书所在目录作为工作目录。适合“新建一个文件夹，把任务书放进去，让 Agent 在这个文件夹里创建项目”的场景。
@@ -30,6 +30,7 @@ vibe bootstrap --cwd . --fix
 vibe ingest ./requirements.md --type requirements --cwd .
 vibe task create TASK-001 "实现功能" --goal "根据需求完成实现" --cwd .
 vibe run TASK-001 --agent claude --mode workspace --cwd .
+vibe report --last-run --cwd .
 vibe review --last-run --strict --diff --cwd .
 vibe learn --last-run --cwd .
 ```
@@ -94,10 +95,10 @@ vibe archive --cwd . --keep 10 --older-than-days 14
 
 ```text
 最快路径：
-  task-template -> check-task -> exec dry-run -> exec -> verify -> summary
+  start -> check-task -> exec dry-run -> exec -> report
 
 中大型任务：
-  requirements -> product notes -> references -> plan -> dry-run -> run -> review -> learn
+  requirements -> product notes -> references -> plan -> dry-run -> run -> report -> review -> learn
 
 高风险任务：
   read-only -> 人工确认 -> workspace -> review -> 手动合并

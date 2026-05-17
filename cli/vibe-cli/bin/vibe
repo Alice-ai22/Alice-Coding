@@ -36,12 +36,14 @@ Usage:
   vibe rules <propose|list|accept|reject> [args] [options]
   vibe refs <search|fetch|add|list|context> [args] [options]
   vibe skill <doctor|sync> [name] [options]
+  vibe start <folder> [template] [options]
   vibe task-template [list|<name> [output.md]] [options]
   vibe check-task <task-file.md> [options]
   vibe plan <task-id> <title> [options]
   vibe run <task-id|plan.md> [options]
   vibe exec <task-file.md> [options]
   vibe review [task-id|run-name] [options]
+  vibe report [run-name|--last-run] [options]
   vibe learn [task-id|run-name] [options]
   vibe issue <task-id> [options]
   vibe pr <task-id> [options]
@@ -67,7 +69,7 @@ Options:
   --why <text>             For refs add: why this reference matters.
   --strict                 For review: include stricter checklist.
   --diff                   For review: include git diff excerpt.
-  --last-run               For review/learn: use latest run.
+  --last-run               For review/report/learn: use latest run.
   --name <name>            Run name for agent-runner.
   --max-turns <n>          Claude only.
   --title <text>           Learning title for vibe learn.
@@ -91,6 +93,7 @@ Examples:
   vibe refs add https://github.com/example/repo --why "参考仪表盘信息架构" --cwd .
   vibe skill doctor alice-coding
   vibe skill sync alice-coding
+  vibe start ./my-app web-app
   vibe task-template list
   vibe task-template default ./task.md
   vibe check-task ./task.md
@@ -98,6 +101,7 @@ Examples:
   vibe run TASK-001 --agent codex --cwd .
   vibe exec ./task.md --agent codex --mode workspace
   vibe review TASK-001 --agent claude --dry-run
+  vibe report --last-run --cwd .
   vibe learn TASK-001 --title "Login flow run"
   vibe sync
   vibe archive --keep 10 --older-than-days 14
@@ -362,36 +366,42 @@ function taskCheck(taskFile) {
     {
       id: "title",
       label: "Task title",
+      weight: 10,
       ok: /^#\s+\S+/m.test(content),
       hint: "Add a top-level # title."
     },
     {
       id: "goal",
       label: "Goal",
+      weight: 15,
       ok: sectionPresent(content, [headingPattern("任务目标", "目标", "Goal")]),
       hint: "Add a Goal / 任务目标 section describing the desired outcome."
     },
     {
       id: "requirements",
       label: "Requirements",
+      weight: 15,
       ok: sectionPresent(content, [headingPattern("具体要求", "功能要求", "Requirements", "Scope")]),
       hint: "Add concrete requirements, scope, or requested changes."
     },
     {
       id: "acceptance",
       label: "Acceptance criteria",
+      weight: 15,
       ok: sectionPresent(content, [headingPattern("验收标准", "Acceptance Criteria", "Definition of Done")]),
       hint: "Add acceptance criteria so the agent knows what done means."
     },
     {
       id: "verification",
       label: "Verification",
+      weight: 15,
       ok: sectionPresent(content, [headingPattern("验证要求", "验证方式", "Verification")]),
       hint: "Add expected build, test, lint, or smoke-check guidance."
     },
     {
       id: "output",
       label: "Output requirements",
+      weight: 10,
       ok: sectionPresent(content, [headingPattern("输出要求", "Output")]),
       hint: "Add an output section requesting changed files, verification, risks, and next steps."
     }
@@ -399,13 +409,104 @@ function taskCheck(taskFile) {
   const placeholderLines = content
     .split("\n")
     .filter((line) => /^-\s*$/.test(line.trim()) || /\b(TODO|TBD)\b|待补充/.test(line));
+  const concreteVerification = /```bash[\s\S]*?(npm|pnpm|yarn|node|python|pytest|vitest|cargo|go test|vibe|agent-runner|make)\b/i.test(content)
+    || /\b(npm run|pnpm|pytest|vitest|node --check|vibe check-task|vibe exec|smoke check|lint|build|test)\b/i.test(content);
+  const hasWorkingDirectoryRule = /工作目录|working directory|--cwd|任务书所在目录|task file/i.test(content);
+  const hasBoundaries = /边界|限制|不要|do not|risk|风险|scope/i.test(content);
+  const hasContext = /\.project-ops|项目上下文|project context|requirements|product|learnings/i.test(content);
   const passed = checks.filter((check) => check.ok).length;
+  const requiredPoints = checks.reduce((sum, check) => sum + (check.ok ? check.weight : 0), 0);
+  const bonusChecks = [
+    {
+      id: "working-directory",
+      label: "Working directory rule",
+      ok: hasWorkingDirectoryRule,
+      points: 5,
+      hint: "Mention the target folder, task-file parent rule, or explicit --cwd."
+    },
+    {
+      id: "boundaries",
+      label: "Boundaries",
+      ok: hasBoundaries,
+      points: 5,
+      hint: "Add boundaries, non-goals, or files/operations that should not be touched."
+    },
+    {
+      id: "context",
+      label: "Project context",
+      ok: hasContext,
+      points: 5,
+      hint: "Mention project context, .project-ops, requirements, product notes, or learnings."
+    },
+    {
+      id: "concrete-verification",
+      label: "Concrete verification",
+      ok: concreteVerification,
+      points: 5,
+      hint: "Name at least one concrete check, such as npm run build, node --check, vibe check-task, or a smoke check."
+    }
+  ];
+  const bonusPoints = bonusChecks.reduce((sum, check) => sum + (check.ok ? check.points : 0), 0);
+  const placeholderPenalty = Math.min(20, placeholderLines.length * 5);
+  const numericScore = Math.max(0, Math.min(100, requiredPoints + bonusPoints - placeholderPenalty));
+  const warnings = [
+    placeholderLines.length > 0 ? `${placeholderLines.length} placeholder or empty bullet lines remain.` : null,
+    concreteVerification ? null : "Verification is present but not very concrete.",
+    hasBoundaries ? null : "Boundaries or non-goals are not explicit.",
+    hasWorkingDirectoryRule ? null : "Working directory rule is not explicit."
+  ].filter(Boolean);
+  const suggestions = [
+    ...checks.filter((check) => !check.ok).map((check) => check.hint),
+    ...bonusChecks.filter((check) => !check.ok).map((check) => check.hint),
+    placeholderLines.length > 0 ? "Fill in empty bullet lines and remove TODO/TBD placeholders." : null
+  ].filter(Boolean);
   return {
     task_file: taskFile,
-    ready: checks.every((check) => check.ok) && placeholderLines.length === 0,
-    score: `${passed}/${checks.length}`,
+    ready: checks.every((check) => check.ok) && placeholderLines.length === 0 && numericScore >= 80,
+    score: `${numericScore}/100`,
+    numeric_score: numericScore,
+    section_score: `${passed}/${checks.length}`,
     checks,
+    bonus_checks: bonusChecks,
+    warnings,
+    suggestions,
     placeholder_lines: placeholderLines.length
+  };
+}
+
+function assessTaskRisk(taskContent, check) {
+  const activeContent = taskContent
+    .split("\n")
+    .filter((line) => !/(不要|不得|禁止|do not|don't|unless|除非|边界限制|边界|非目标|non-goal)/i.test(line))
+    .join("\n");
+  const riskSignals = [
+    { level: "high", pattern: /删除|remove|delete|rm -rf|reset --hard|drop table|wipe/i, reason: "Task mentions deletion or destructive operations." },
+    { level: "high", pattern: /deploy|发布|release|production|线上|token|secret|密钥|credential/i, reason: "Task may involve release, production, or secrets." },
+    { level: "medium", pattern: /config|配置|\.env|权限|permission|auth|login|payment|database|迁移|migration/i, reason: "Task touches configuration, auth, database, or permission-sensitive areas." },
+    { level: "medium", pattern: /重构|refactor|architecture|架构|跨模块|全局/i, reason: "Task may involve broad architectural or cross-module changes." }
+  ];
+  const reasons = [];
+  let level = "low";
+  for (const signal of riskSignals) {
+    if (signal.pattern.test(activeContent)) {
+      reasons.push(signal.reason);
+      if (signal.level === "high") level = "high";
+      else if (level === "low") level = "medium";
+    }
+  }
+  if (!check.ready) {
+    reasons.push("Task file is not fully ready.");
+    if (level === "low") level = "medium";
+  }
+  if (check.numeric_score < 70) {
+    reasons.push("Task quality score is below 70.");
+    level = "high";
+  }
+  if (!reasons.length) reasons.push("No high-risk keywords detected and task quality is sufficient.");
+  return {
+    level,
+    suggested_mode: level === "high" ? "read-only" : "workspace",
+    reasons
   };
 }
 
@@ -468,6 +569,28 @@ function readOptional(filePath) {
   return existsSync(filePath) ? readFileSync(filePath, "utf8") : "";
 }
 
+function ensureBasicProjectOps(cwd, projectName) {
+  const root = path.join(cwd, ".project-ops");
+  mkdirSync(path.join(root, "requirements"), { recursive: true });
+  mkdirSync(path.join(root, "product"), { recursive: true });
+  mkdirSync(path.join(root, "plans"), { recursive: true });
+  const files = [
+    ["project.json", JSON.stringify({ name: projectName || path.basename(cwd), createdAt: now() }, null, 2) + "\n"],
+    ["tasks.json", JSON.stringify({ tasks: [] }, null, 2) + "\n"],
+    ["verification.json", JSON.stringify({ commands: [], notes: "Add project-specific verification commands here." }, null, 2) + "\n"],
+    ["decisions.md", "# Decisions\n"],
+    ["learnings.md", "# Learnings\n"],
+    ["project-rules.md", "# Project Rules\n"],
+    [path.join("requirements", "README.md"), "# Requirements\n"],
+    [path.join("product", "README.md"), "# Product Notes\n"],
+    [path.join("plans", "README.md"), "# Plans\n"]
+  ];
+  for (const [relative, content] of files) {
+    const file = path.join(root, relative);
+    if (!existsSync(file)) writeFileSync(file, content);
+  }
+}
+
 function commandInit(options) {
   const result = callProjectOps("project_ops_init", {
     project_dir: options.cwd,
@@ -475,6 +598,41 @@ function commandInit(options) {
     response_format: options.json ? "json" : "markdown"
   });
   printResult(result, options.json);
+}
+
+function commandStart(options) {
+  const [folderInput, templateInput] = options.positionals;
+  if (!folderInput) fail("Missing folder path.");
+  const projectDir = path.resolve(process.cwd(), folderInput);
+  const templateName = templateInput || "default";
+  const templatePath = resolveTaskTemplate(templateName);
+  const taskFile = path.join(projectDir, "task.md");
+  mkdirSync(projectDir, { recursive: true });
+  if (existsSync(taskFile)) fail(`Task file already exists: ${taskFile}`);
+  writeFileSync(taskFile, readFileSync(templatePath, "utf8"));
+  ensureBasicProjectOps(projectDir, options.projectName || path.basename(projectDir));
+  const output = {
+    project_dir: projectDir,
+    task_file: taskFile,
+    template: templateName,
+    project_ops: path.join(projectDir, ".project-ops"),
+    next: [
+      `vibe check-task ${taskFile}`,
+      `vibe exec ${taskFile} --agent ${options.agent} --mode workspace --dry-run`,
+      `vibe exec ${taskFile} --agent ${options.agent} --mode workspace`
+    ]
+  };
+  if (options.json) {
+    console.log(JSON.stringify(output, null, 2));
+    return;
+  }
+  console.log("# Alice Coding Project Started\n");
+  console.log(`Project: ${projectDir}`);
+  console.log(`Task file: ${taskFile}`);
+  console.log(`Template: ${templateName}`);
+  console.log(`Project memory: ${output.project_ops}`);
+  console.log("\nNext:");
+  for (const command of output.next) console.log(`- ${command}`);
 }
 
 function commandStatus(options) {
@@ -901,14 +1059,27 @@ function commandCheckTask(options) {
   console.log("# Task File Check\n");
   console.log(`File: ${result.task_file}`);
   console.log(`Score: ${result.score}`);
+  console.log(`Sections: ${result.section_score}`);
   console.log(`Status: ${result.ready ? "ready" : "needs work"}`);
   console.log("");
   for (const check of result.checks) {
     console.log(`- ${check.ok ? "ok" : "missing"} ${check.label}`);
     if (!check.ok) console.log(`  ${check.hint}`);
   }
+  for (const check of result.bonus_checks) {
+    console.log(`- ${check.ok ? "ok" : "warning"} ${check.label}`);
+    if (!check.ok) console.log(`  ${check.hint}`);
+  }
   if (result.placeholder_lines > 0) {
     console.log(`- warning Placeholder or empty bullet lines: ${result.placeholder_lines}`);
+  }
+  if (result.warnings.length) {
+    console.log("\nWarnings:");
+    for (const warning of result.warnings) console.log(`- ${warning}`);
+  }
+  if (result.suggestions.length) {
+    console.log("\nSuggested fixes:");
+    for (const suggestion of result.suggestions) console.log(`- ${suggestion}`);
   }
 }
 
@@ -965,6 +1136,7 @@ function commandExec(options) {
 
   const taskContent = readFileSync(taskFile, "utf8");
   const check = taskCheck(taskFile);
+  const risk = assessTaskRisk(taskContent, check);
   const title = taskContent.split("\n").find((line) => line.startsWith("#"))?.replace(/^#+\s*/, "").trim() || path.basename(taskFile, path.extname(taskFile));
   const planDir = path.join(projectDir, ".project-ops", "plans");
   mkdirSync(planDir, { recursive: true });
@@ -994,9 +1166,17 @@ function commandExec(options) {
     "## Task Quality Check",
     "",
     `- Score: ${check.score}`,
+    `- Sections: ${check.section_score}`,
     `- Status: ${check.ready ? "ready" : "needs work"}`,
     ...check.checks.filter((item) => !item.ok).map((item) => `- Missing ${item.label}: ${item.hint}`),
+    ...check.warnings.map((warning) => `- Warning: ${warning}`),
     check.placeholder_lines > 0 ? `- Warning: ${check.placeholder_lines} placeholder or empty bullet lines remain in the task file.` : null,
+    "",
+    "## Risk Assessment",
+    "",
+    `- Risk: ${risk.level}`,
+    `- Suggested mode: ${risk.suggested_mode}`,
+    ...risk.reasons.map((reason) => `- ${reason}`),
     "",
     "## Task File Content",
     "",
@@ -1018,6 +1198,8 @@ function commandExec(options) {
   console.log(`Task file: ${taskFile}`);
   console.log(`Working directory: ${projectDir}`);
   console.log(`Generated plan: ${planPath}`);
+  console.log(`Risk: ${risk.level}; suggested mode: ${risk.suggested_mode}`);
+  for (const reason of risk.reasons) console.log(`- ${reason}`);
   if (!check.ready) console.log(`Task check: ${check.score}, needs work; continuing with best effort.`);
   console.log(`Running: ${AGENT_RUNNER} ${args.join(" ")}`);
   const result = spawnSync(AGENT_RUNNER, args, {
@@ -1090,6 +1272,64 @@ function commandReview(options) {
   });
   if (result.error) fail(result.error.message);
   if (result.status !== 0) process.exit(result.status ?? 1);
+}
+
+function commandReport(options) {
+  const [identifier] = options.lastRun ? ["last"] : options.positionals;
+  const runDir = resolveRunDir(options.cwd, identifier);
+  const commandText = readOptional(path.join(runDir, "command.json"));
+  const summary = readOptional(path.join(runDir, "summary.md"));
+  const stdout = readOptional(path.join(runDir, "stdout.log"));
+  const stderr = readOptional(path.join(runDir, "stderr.log"));
+  let commandData = {};
+  try {
+    commandData = commandText.trim() ? JSON.parse(commandText) : {};
+  } catch {
+    commandData = {};
+  }
+  const changedFiles = spawnSync("git", ["diff", "--name-only"], {
+    cwd: options.cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"]
+  }).stdout.trim().split("\n").filter(Boolean);
+  const report = [
+    `# Run Report: ${path.basename(runDir)}`,
+    "",
+    "## Run",
+    "",
+    `- Directory: ${runDir}`,
+    commandData.cwd ? `- Working directory: ${commandData.cwd}` : null,
+    commandData.command ? `- Command: ${commandData.command} ${(commandData.args || []).join(" ")}` : null,
+    "",
+    "## Summary",
+    "",
+    (summary || stdout || "No summary captured.").trim().slice(0, 6000),
+    "",
+    "## Changed Files",
+    "",
+    changedFiles.length ? changedFiles.map((file) => `- ${file}`).join("\n") : "- No Git diff files detected, or this is not a Git worktree.",
+    "",
+    "## Verification Evidence",
+    "",
+    /pass|passed|通过|success|succeeded|ok/i.test(summary + stdout)
+      ? "- Summary/stdout contains successful verification language."
+      : "- No explicit successful verification language detected in captured output.",
+    stderr.trim() ? "- stderr is present; inspect the run logs." : "- stderr is empty or not captured.",
+    "",
+    "## Suggested Follow-Up",
+    "",
+    "- Run `vibe review --last-run --strict --diff --cwd <project>` for higher-risk code changes.",
+    "- Run `vibe learn --last-run --cwd <project>` if the run produced reusable workflow knowledge.",
+    ""
+  ].filter((line) => line !== null).join("\n");
+  const reportPath = path.join(runDir, "report.md");
+  writeFileSync(reportPath, report);
+  if (options.json) {
+    console.log(JSON.stringify({ run_dir: runDir, report: reportPath, changed_files: changedFiles }, null, 2));
+    return;
+  }
+  console.log(report);
+  console.log(`Report written: ${reportPath}`);
 }
 
 function commandLearn(options) {
@@ -1302,12 +1542,14 @@ function run() {
   else if (options.command === "rules") commandRules(options);
   else if (options.command === "refs") commandRefs(options);
   else if (options.command === "skill") commandSkill(options);
+  else if (options.command === "start") commandStart(options);
   else if (options.command === "task-template") commandTaskTemplate(options);
   else if (options.command === "check-task") commandCheckTask(options);
   else if (options.command === "plan") commandPlan(options);
   else if (options.command === "run") commandRun(options);
   else if (options.command === "exec") commandExec(options);
   else if (options.command === "review") commandReview(options);
+  else if (options.command === "report") commandReport(options);
   else if (options.command === "learn") commandLearn(options);
   else if (options.command === "issue") commandIssue(options);
   else if (options.command === "pr") commandPr(options);

@@ -7,12 +7,16 @@
 - `agent-runner` now supports `--skip-git-repo-check` for Codex and adds it automatically when `--cwd` is not inside a Git worktree.
 - `vibe skill doctor <name>` to compare source skill templates with installed Codex skills.
 - `vibe skill sync <name>` to sync `templates/skills/<name>` into the local Codex skills directory.
+- `vibe start <folder> [template]` to create a project folder, starter `task.md`, and `.project-ops/` memory in one step.
+- `vibe report [run-name|--last-run]` to generate a standard report from `.agent-runs/`.
 - `skill-improve` task template for improving and verifying skills.
 - Alice Coding skill references for task-file execution, command usage, and MCP fallback behavior.
 
 ### Changed
 
-- Documentation now explains non-Git task folders, skill maintenance, and the `skill-improve` workflow.
+- `vibe check-task` now returns a 100-point quality score with section, boundary, working-directory, context, and verification suggestions.
+- `vibe exec` generated plans now include task quality details and a lightweight risk assessment.
+- Documentation now explains non-Git task folders, `vibe start`, `vibe report`, skill maintenance, and the `skill-improve` workflow.
 
 ## v0.1.0
 

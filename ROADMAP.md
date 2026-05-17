@@ -10,6 +10,7 @@ Alice Coding 当前处于 `v0.1.x` 早期阶段，目标是先把本地闭环工
 - 补充 demo project 和 smoke test。
 - 增强安装脚本的错误提示。
 - 持续完善 skill 维护体验，包括 `vibe skill doctor/sync` 和 skill 优化任务模板。
+- 持续打磨任务书入口，包括 `vibe start`、100 分制 `check-task`、执行风险提示和 `vibe report`。
 
 ## v0.2.x：安装和配置体验
 
@@ -23,7 +24,7 @@ Alice Coding 当前处于 `v0.1.x` 早期阶段，目标是先把本地闭环工
 - 更智能的 verification selector。
 - 支持更多语言和框架的验证矩阵。
 - reference MCP 增加 license 提醒和风险标记。
-- 支持更清晰的 run summary 和复盘报告。
+- 支持更清晰的 run summary、复盘报告和跨运行对比。
 
 ## 长期方向
 

@@ -11,6 +11,7 @@ Run the dry-run form before real execution when the command will start an autono
 `vibe exec` is the task-file fast path. It creates a plan under the target project's `.project-ops/plans/` and then calls `agent-runner <agent> <plan.md> --cwd <project>`. Use `agent-runner` directly when a plan file already exists.
 
 ```bash
+vibe start <project-folder> web-app
 vibe task-template list
 vibe task-template default <task-file.md>
 vibe task-template web-app <task-file.md>
@@ -19,9 +20,14 @@ vibe check-task <task-file.md>
 vibe exec <task-file.md> --agent codex --mode workspace --dry-run
 vibe exec <task-file.md> --agent codex --mode workspace
 vibe exec <task-file.md> --cwd <project> --agent codex --mode workspace
+vibe report --last-run --cwd <project>
 ```
 
 Use this when the user creates a folder, places a task file inside it, and wants AI to create or modify the project in that same folder.
+
+Use `vibe start <project-folder> [template]` when the user has chosen a folder but has not created `task.md` yet. It creates the folder, a starter task file, and `.project-ops/`.
+
+Use `vibe check-task` before real execution. It returns a 100-point task quality score, missing sections, warning signals, and concrete suggestions.
 
 ## Skill Maintenance
 
@@ -76,6 +82,7 @@ Use `read-only` for inspection, `workspace` for normal project edits, and `full-
 
 ```bash
 vibe review TASK-001 --agent claude --cwd <project>
+vibe report --last-run --cwd <project>
 vibe learn TASK-001 --cwd <project>
 vibe task done TASK-001 --cwd <project>
 ```

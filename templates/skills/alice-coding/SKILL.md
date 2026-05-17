@@ -44,12 +44,14 @@ When a task mentions Alice Coding itself, resolve the intended root from the use
 3. If the task targets Alice Coding itself, identify whether it targets the source repository, an installed skill, or a target project.
 4. If the working directory contains `.project-ops/`, gather project context before changing code. Prefer project-ops MCP tools when available; otherwise inspect `.project-ops/` files directly.
 5. If the user has a task idea but no task file, suggest `vibe task-template <name> <task-file.md>` and have them fill it in.
-6. If the user provides a task file, run `vibe check-task <task-file>` before execution unless the user explicitly asks for inspection only or the file is clearly not meant to execute.
-7. Before real closed-loop execution, run `vibe exec <task-file> --agent <agent> --mode <mode> --dry-run` and inspect the generated command, working directory, plan path, and execution mode.
-8. If the dry-run is reasonable and the user requested execution, run `vibe exec <task-file> --agent codex --mode workspace` for normal local edits. Use `read-only` for review-only tasks and reserve `full-auto` for explicit broad autonomy.
-9. If the user asks for a task-id workflow, use `vibe status`, `vibe task`, `vibe plan`, and `vibe run` as appropriate.
-10. If code, docs, config, or workflow behavior changes, choose the smallest relevant verification and record or summarize the result.
-11. If the work creates reusable workflow knowledge, append it to project learnings when a project task context exists.
+6. If the user wants a new product folder and has not created a task file yet, suggest `vibe start <folder> [template]` to create `task.md` and `.project-ops/` together.
+7. If the user provides a task file, run `vibe check-task <task-file>` before execution unless the user explicitly asks for inspection only or the file is clearly not meant to execute.
+8. Before real closed-loop execution, run `vibe exec <task-file> --agent <agent> --mode <mode> --dry-run` and inspect the generated command, working directory, plan path, risk assessment, and execution mode.
+9. If the dry-run is reasonable and the user requested execution, run `vibe exec <task-file> --agent codex --mode workspace` for normal local edits. Use `read-only` for review-only tasks and reserve `full-auto` for explicit broad autonomy.
+10. After an agent run, use `vibe report --last-run --cwd <project>` when the user needs a standard completion report.
+11. If the user asks for a task-id workflow, use `vibe status`, `vibe task`, `vibe plan`, and `vibe run` as appropriate.
+12. If code, docs, config, or workflow behavior changes, choose the smallest relevant verification and record or summarize the result.
+13. If the work creates reusable workflow knowledge, append it to project learnings when a project task context exists.
 
 ## Command Use
 
@@ -57,10 +59,12 @@ Fast path from a task file:
 
 ```bash
 vibe task-template list
+vibe start <project-folder> web-app
 vibe task-template default <task-file.md>
 vibe check-task <task-file.md>
 vibe exec <task-file.md> --agent codex --mode workspace --dry-run
 vibe exec <task-file.md> --agent codex --mode workspace
+vibe report --last-run --cwd <project-folder>
 ```
 
 Create a task file from a template:
@@ -98,6 +102,7 @@ Use dry-run output as a gate before starting an autonomous run. Confirm that:
 
 - `--cwd` is either explicit or equals the task file's parent directory.
 - The generated plan is under the intended project's `.project-ops/plans/`.
+- The task quality score and risk assessment are acceptable for the requested mode.
 - The selected mode matches the requested risk level.
 - The command will call the intended `agent-runner` entrypoint.
 

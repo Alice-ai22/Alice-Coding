@@ -27,12 +27,12 @@ git clone https://github.com/Alice-ai22/Alice-Coding.git
 cd Alice-Coding
 ./scripts/install-local.sh
 
-mkdir -p ~/Projects/my-app
-vibe task-template web-app ~/Projects/my-app/task.md
+vibe start ~/Projects/my-app web-app
 $EDITOR ~/Projects/my-app/task.md
 vibe check-task ~/Projects/my-app/task.md
 vibe exec ~/Projects/my-app/task.md --agent codex --mode workspace --dry-run
 vibe exec ~/Projects/my-app/task.md --agent codex --mode workspace
+vibe report --last-run --cwd ~/Projects/my-app
 ```
 
 Default rule: **if `--cwd` is not provided, the task file's parent directory is the agent working directory.**
@@ -74,10 +74,12 @@ task.md
 
 | Area | What it does |
 | --- | --- |
+| `vibe start` | Creates a project folder, `task.md`, and starter `.project-ops/` memory in one step. |
 | `vibe task-template` | Creates task files from built-in templates. |
-| `vibe check-task` | Checks whether a task file has goal, requirements, acceptance criteria, verification, and output expectations. |
+| `vibe check-task` | Scores task-file readiness on a 100-point scale and suggests missing context. |
 | `vibe exec` | Converts a task file into an execution plan and launches an agent run. |
 | `vibe run` | Runs a structured `.project-ops` task by task id or plan path. |
+| `vibe report` | Generates a standard report from the latest `.agent-runs/` entry. |
 | `vibe skill` | Checks or syncs source skill templates with installed Codex skills. |
 | `agent-runner` | Starts Codex or Claude Code with a generated prompt and run directory. |
 | `skills` MCP | Helps agents find and read local skills. |
@@ -125,13 +127,18 @@ Alice Coding itself stays generic. Your private requirements, run logs, and lear
 
 ```bash
 # Fast path from a task file
-vibe task-template web-app ./task.md
-vibe task-template skill-improve ./skill-task.md
+vibe start ./my-app web-app
+cd ./my-app
 vibe check-task ./task.md
 vibe exec ./task.md --agent codex --mode workspace --dry-run
 vibe exec ./task.md --agent codex --mode workspace
+vibe report --last-run
 vibe skill doctor alice-coding
 vibe skill sync alice-coding
+
+# Template-only path
+vibe task-template web-app ./task.md
+vibe task-template skill-improve ./skill-task.md
 
 # Structured project workflow
 vibe bootstrap --cwd . --fix

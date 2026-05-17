@@ -30,10 +30,11 @@ cd Alice-coding
 Alice Coding 不要求固定任务目录。默认规则是：**任务书所在目录就是工作目录**。
 
 ```bash
-mkdir -p ~/Projects/todo-app
-vibe task-template web-app ~/Projects/todo-app/task.md
+vibe start ~/Projects/todo-app web-app
 $EDITOR ~/Projects/todo-app/task.md
 ```
+
+`vibe start` 会创建项目文件夹、生成 `task.md`，并初始化 `.project-ops/`。如果你只想复制模板，也可以使用 `vibe task-template web-app ~/Projects/todo-app/task.md`。
 
 示例任务书：
 
@@ -62,6 +63,8 @@ Create a small local web app for managing todos.
 vibe check-task ~/Projects/todo-app/task.md
 ```
 
+`vibe check-task` 会输出 100 分制质量评分、缺失段落、边界/工作目录/验证建议。分数低时仍可 dry-run，但建议先补齐任务书。
+
 建议真实执行前先 dry-run：
 
 ```bash
@@ -84,6 +87,12 @@ vibe exec ~/Projects/todo-app/task.md --agent codex --mode workspace
 
 ```bash
 vibe exec ~/Desktop/task.md --cwd ~/Projects/todo-app --agent codex --mode workspace
+```
+
+执行结束后可以生成标准化运行报告：
+
+```bash
+vibe report --last-run --cwd ~/Projects/todo-app
 ```
 
 ## 5. 配置 Codex 和 Claude Code
@@ -152,10 +161,10 @@ vibe run TASK-001 --agent codex --mode workspace --cwd .
 
 ```text
 最快路径：
-  新建文件夹 -> task-template -> check-task -> vibe exec --dry-run -> vibe exec
+  vibe start -> check-task -> vibe exec --dry-run -> vibe exec -> vibe report
 
 长期项目：
-  bootstrap -> ingest -> task create -> run --dry-run -> run -> review -> learn
+  bootstrap -> ingest -> task create -> run --dry-run -> run -> report -> review -> learn
 
 Skill 维护：
   task-template skill-improve -> skill doctor -> 修改模板 -> skill sync
