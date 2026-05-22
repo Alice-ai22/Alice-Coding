@@ -188,6 +188,7 @@ docs/                quickstart, architecture, MCP, workflow docs
 - [Architecture](docs/architecture.md)
 - [Configuration](docs/configuration.md)
 - [MCP Servers](docs/mcp-servers.md)
+- [Reference and Skills Playbook](docs/reference-and-skills-playbook.md)
 - [Project Purpose](docs/project-purpose.md)
 - [Common Workflows](docs/workflows.md)
 - [Roadmap](ROADMAP.md)

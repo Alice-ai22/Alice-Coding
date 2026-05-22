@@ -47,6 +47,8 @@ vibe refs context --cwd .
 
 参考项目会登记到 `.project-ops/references/`。Agent 可以读取这些参考上下文，但不应该盲目复制外部代码。
 
+更完整的参考项目和 skills 协作流程见 [Reference and Skills Playbook](reference-and-skills-playbook.md)。
+
 ## 优化 Skill
 
 ```bash
